@@ -3,3 +3,4 @@ ve/
 *.pyc
 *.swp
 twitter-dump.log
+.idea/
