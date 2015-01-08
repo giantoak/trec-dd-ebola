@@ -1,4 +1,4 @@
-'''
+"""
 TREC DD 2015
 Ebola domain
 
@@ -8,19 +8,16 @@ ebola crisis.
 
 This first step identifies the _users_ tweeting from West Africa. Note that this
 assumes the user has remained in place for the entire duration.
-
-'''
-import mrjob
-
-from mrjob.job import MRJob
-from mrjob.step import MRStep
-from mrjob.protocol import RawValueProtocol
-
+"""
 import datetime
 import dateutil
 import dateutil.parser
+from mrjob.job import MRJob
+from mrjob.step import MRStep
+from mrjob.protocol import RawValueProtocol
+import os
 from urllib2 import urlparse
-import zlib
+# import zlib
 
 # parse code
 from twokenize import simpleTokenize
@@ -33,6 +30,7 @@ from streamcorpus import decrypt_and_uncompress
 from streamcorpus_pipeline._spinn3r_feed_storage import ProtoStreamReader
 import logging
 from cStringIO import StringIO
+
 
 def init_gazetteers(filename):
         """
@@ -58,6 +56,7 @@ def init_gazetteers(filename):
         with open(outname, 'wb') as out: 
             pickle.dump(trie, out)
 
+
 class RawCSVProtocol(object):
     """
     Parses object as comma-separated values, with no quote escaping.
@@ -71,9 +70,10 @@ class RawCSVProtocol(object):
         return tuple(parts)
 
     def write(self, key, value):
-        ''' Value is expected to be a string already '''
+        """Value is expected to be a string already"""
         vals = ','.join((key, value))
         return vals
+
 
 class MRTwitterWestAfricaUsers(MRJob):
     # Custom parse tab-delimited values
@@ -83,7 +83,6 @@ class MRTwitterWestAfricaUsers(MRJob):
     # Output as csv
     OUTPUT_PROTOCOL = RawCSVProtocol
 
-    
     def mapper_init(self):
         self.logger = logging.getLogger()
 
@@ -103,9 +102,9 @@ class MRTwitterWestAfricaUsers(MRJob):
         f = StringIO(data)
         reader = ProtoStreamReader(f)
         for entry in reader:
-            ## entries have other info, see other info here:
-            ## https://github.com/trec-kba/streamcorpus-pipeline/blob/master/ 
-            ##      streamcorpus_pipeline/_spinn3r_feed_storage.py#L269
+            # entries have other info, see other info here:
+            #  https://github.com/trec-kba/streamcorpus-pipeline/blob/master/
+            #       streamcorpus_pipeline/_spinn3r_feed_storage.py#L269
             tweet = entry.feed_entry
 
             time = tweet.last_published
@@ -134,18 +133,16 @@ class MRTwitterWestAfricaUsers(MRJob):
     def steps(self):
         return [
                 MRStep(
-                    mapper_init = self.mapper_init,
-                    mapper = self.mapper_get_files),
+                    mapper_init=self.mapper_init,
+                    mapper=self.mapper_get_files),
                 MRStep(
-                    mapper_init = self.mapper_getter_init,
-                    mapper = self.mapper_get_stats,
-                    combiner  = self.combiner_agg_stats,
-                    reducer   = self.reducer_agg_stats),
+                    mapper_init=self.mapper_getter_init,
+                    mapper=self.mapper_get_stats,
+                    combiner=self.combiner_agg_stats,
+                    reducer=self.reducer_agg_stats),
 
-                MRStep(reducer= self.reducer_filter)
+                MRStep(reducer=self.reducer_filter)
                 ]
-    
-    
 
     def mapper_get_stats(self, _, line):
         """
@@ -166,7 +163,7 @@ class MRTwitterWestAfricaUsers(MRJob):
         7AM to 11PM are taken as daylight hours.
 
         """
-        user, time, tweet= line.split('\t')
+        user, time, tweet = line.split('\t')
         
         # discard tweets out of our window of interest
         t = dateutil.parser.parse(time)
@@ -194,7 +191,6 @@ class MRTwitterWestAfricaUsers(MRJob):
         
         # return result
         yield user, (1, is_in_time, west_africa_mention, other_place_mention)
-
 
     def combiner_agg_stats(self, user, stats):
         yield user, map(sum, zip(*stats))
