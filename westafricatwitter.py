@@ -186,8 +186,8 @@ class MRTwitterWestAfricaUsers(MRJob):
         tweet_tokens = simpleTokenize(body) 
 
         # find matches
-        west_africa_mention = trie_subseq(tweet_tokens, west_africa_places)
-        other_place_mention = trie_subseq(tweet_tokens, other_places)
+        west_africa_mention = trie_subseq(tweet_tokens, self.west_africa_places)
+        other_place_mention = trie_subseq(tweet_tokens, self.other_places)
         
         # return result
         yield user, (1, is_in_time, west_africa_mention, other_place_mention)
