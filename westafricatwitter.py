@@ -21,7 +21,8 @@ from urllib2 import urlparse
 
 # parse code
 from twokenize import simpleTokenize
-from trie import trie_append, trie_subseq
+from trie import trie_append
+from trie import trie_subseq
 import cPickle as pickle
 
 # ingest imports
@@ -47,8 +48,8 @@ def init_gazetteers(filename):
         trie = {}
         with open(filename) as f:
             for line in f:
-                parts = [map(preprocess_token, x.split(' ')) + ['$'] 
-                        for x in line.strip().split(',')]
+                parts = [map(preprocess_token, x.split(' ')) + ['$']
+                         for x in line.strip().split(',')]
 
                 map(lambda x: trie_append(x, trie), parts)
         
@@ -60,9 +61,14 @@ def init_gazetteers(filename):
 class RawCSVProtocol(object):
     """
     Parses object as comma-separated values, with no quote escaping.
+    :param object:
     """
 
     def read(self, line):
+        """
+        :param line:
+        :return:
+        """
         parts = line.split(',', 1)
         if len(parts) == 1:
             parts.append(None)
@@ -70,12 +76,19 @@ class RawCSVProtocol(object):
         return tuple(parts)
 
     def write(self, key, value):
-        """Value is expected to be a string already"""
+        """
+        Value is expected to be a string already.
+        :param key:
+        :param value:
+        """
         vals = ','.join((key, value))
         return vals
 
 
 class MRTwitterWestAfricaUsers(MRJob):
+    """
+    <Temporary empty docstring
+    """
     # Custom parse tab-delimited values
     INPUT_PROTOCOL = RawValueProtocol
     # Serialize messages internally 
@@ -84,10 +97,19 @@ class MRTwitterWestAfricaUsers(MRJob):
     OUTPUT_PROTOCOL = RawCSVProtocol
 
     def mapper_init(self):
+        """
+        Init mapper - just logging for now
+        :return:
+        """
         self.logger = logging.getLogger()
 
     def mapper_get_files(self, line):
-        
+        """
+        Takes a line specifying a file in an s3 bucket,
+        connects to & retrieves the file
+        :param str|unicode line: file name
+        :return:
+        """
         parts = line[:-1].split('/')
         url = os.path.join('http://s3.amazonaws.com', *parts[2:])
         resp = requests.get(url)
@@ -122,6 +144,10 @@ class MRTwitterWestAfricaUsers(MRJob):
     
 
     def mapper_getter_init(self):
+        """
+        Initialize variables used in getting mapper data
+        :return:
+        """
         self.feb_2014 = datetime.datetime(2014, 2, 1, tzinfo=dateutil.tz.tzutc())
         self.dec_2014 = datetime.datetime(2014, 12, 1, tzinfo=dateutil.tz.tzutc())
 
