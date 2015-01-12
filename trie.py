@@ -1,17 +1,15 @@
-'''
+"""
 Simple prefix tree class for fast lookup of n-grams
-
-'''
+"""
 
 # TODO: refactor trie code into a class...
 # TODO: accept tokenizer as argument, add ending delimiter internally
 
+
 def trie_append(parts, trie):
     """
     Recursively append to a trie of tokens (prefix tree) from a list of tokens.
-
     Destructive.
-    
     Assumes tokens are at least len 2.
     """
     
@@ -32,13 +30,11 @@ def trie_append(parts, trie):
 
     return trie
 
+
 def _trie_check(tokens, trie, end_delim='$'):
     """
-    
     Check whether a list of tokens is present in trie.
-
     Greedily quits when an end delimiter is found.
-
     Assumes tokens is at least len 2.
     """
     
@@ -61,7 +57,6 @@ def _trie_check(tokens, trie, end_delim='$'):
 
 def trie_subseq(seq, trie):
     """
-
     Checks for any matching subsequence in seq in trie.
     """
 
@@ -70,4 +65,3 @@ def trie_subseq(seq, trie):
             return True
     
     return False
-
