@@ -47,7 +47,6 @@ def _trie_check(tokens, trie, end_delim='$'):
     except IndexError:
         # No end delimiter found, and no more tokens are left
         return False
-    
 
     try:
         return _trie_check(rest, trie[x])
