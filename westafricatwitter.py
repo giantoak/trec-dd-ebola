@@ -9,6 +9,7 @@ ebola crisis.
 This first step identifies the _users_ tweeting from West Africa. Note that this
 assumes the user has remained in place for the entire duration.
 """
+import codecs
 import datetime
 import dateutil
 import dateutil.parser
@@ -87,7 +88,7 @@ class RawCSVProtocol(object):
 
 class MRTwitterWestAfricaUsers(MRJob):
     """
-    <Temporary empty docstring
+    <Temporary empty docstring>
     """
     # Custom parse tab-delimited values
     INPUT_PROTOCOL = RawValueProtocol
@@ -133,6 +134,7 @@ class MRTwitterWestAfricaUsers(MRJob):
             user_link = tweet.author[0].link[0].href
             user = urlparse.urlsplit(user_link).path[1:]
             body = tweet.title.encode('utf8')
+            lang = tweet.lang[0].code
 
             # Tab-delimited
             yield (None, '{}\t{}\t{}'.format(user, time, body))
@@ -155,6 +157,8 @@ class MRTwitterWestAfricaUsers(MRJob):
 
         self.west_africa_places = self.load_gazetteers('westAfrica.csv.p')
         self.other_places = self.load_gazetteers('otherPlace.csv.p')
+
+        self.crisislex_grams = self.load_gazetteers('CrisisLexRec.csv.p')
 
     def steps(self):
         return [
@@ -199,24 +203,55 @@ class MRTwitterWestAfricaUsers(MRJob):
 
         self.increment_counter('wa1', 'date_valid', 1)
 
+        ###
+        # Meta-data features
+        ###
+
         ############################################
-        # is the tweet in the right time window?
+        # Is the tweet in the right time window?
         ############################################
         is_in_time = int(t.time() > self.utc_7)
 
-        ############################################
-        # does the tweet contain mention of places?
-        ############################################
-        
-        # tokenize tweet
-        tweet_tokens = simpleTokenize(body) 
+        ###
+        # Text Features
+        ###
 
-        # find matches
+        # tokenize tweet
+        tweet_tokens = simpleTokenize(body)
+
+        ############################################
+        # Does the tweet mention places?
+        ############################################
         west_africa_mention = trie_subseq(tweet_tokens, self.west_africa_places)
         other_place_mention = trie_subseq(tweet_tokens, self.other_places)
-        
+
+        ############################################
+        # Does the tweet mention keywords or topics related to medicine/Ebola?
+        ############################################
+        # TODO: Mine Ebola and medical synsets from wordnet
+        # TODO: Mine Ebola and medical terms from NELL - weak results so far
+
+        ############################################
+        # Does the tweet contain keywords related to CrisisLex disasters
+        ############################################
+        crisislex_mention = trie_subseq(tweet_tokens, self.crisislex_grams)
+
+        ############################################
+        # Was the tweet made by an account associated with the disaster
+        # Define list based on a first pass that sees how many tweets
+        # related to the topic each user makes, choose a threshold.
+        # Define list based on known accounts, such as CDC, doctors
+        # without borders, etc.
+        ############################################
+
+        ############################################
         # return result
-        yield user, (1, is_in_time, west_africa_mention, other_place_mention)
+        ############################################
+        yield user, (1,
+                     is_in_time,
+                     west_africa_mention,
+                     other_place_mention,
+                     crisislex_mention)
 
     def combiner_agg_stats(self, user, stats):
         yield user, map(sum, zip(*stats))
