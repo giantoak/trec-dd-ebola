@@ -4,3 +4,4 @@ ve/
 *.swp
 twitter-dump.log
 .idea/
+*.private
