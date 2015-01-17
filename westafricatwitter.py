@@ -9,14 +9,19 @@ ebola crisis.
 This first step identifies the _users_ tweeting from West Africa. Note that this
 assumes the user has remained in place for the entire duration.
 """
-import codecs
+# import codecs
 import datetime
 import dateutil
 import dateutil.parser
+import logging
 from mrjob.job import MRJob
 from mrjob.step import MRStep
 from mrjob.protocol import RawValueProtocol
 import os
+import cPickle as pickle
+import pytz
+import requests
+from cStringIO import StringIO
 from urllib2 import urlparse
 # import zlib
 
@@ -24,14 +29,10 @@ from urllib2 import urlparse
 from twokenize import simpleTokenize
 from trie import trie_append
 from trie import trie_subseq
-import cPickle as pickle
 
 # ingest imports
-import requests
 from streamcorpus import decrypt_and_uncompress
 from streamcorpus_pipeline._spinn3r_feed_storage import ProtoStreamReader
-import logging
-from cStringIO import StringIO
 
 
 def init_gazetteers(filename):
@@ -90,34 +91,79 @@ class MRTwitterWestAfricaUsers(MRJob):
     """
     <Temporary empty docstring>
     """
-    # Custom parse tab-delimited values
-    INPUT_PROTOCOL = RawValueProtocol
-    # Serialize messages internally 
-    INTERNAL_PROTOCOL = RawValueProtocol
-    # Output as csv
-    OUTPUT_PROTOCOL = RawCSVProtocol
+    INPUT_PROTOCOL = RawValueProtocol  # Custom parse tab-delimited values
+    INTERNAL_PROTOCOL = RawValueProtocol  # Serialize messages internally
+    OUTPUT_PROTOCOL = RawCSVProtocol  # Output as csv
+
+    def configure_options(self):
+        """
+        Configure default options needed by all jobs.
+        Critically, each job needs a copy of the key to decrypt the tweets.
+        """
+        super(MRTwitterWestAfricaUsers, self).configure_options()
+        self.add_file_option('--gpg-private',
+                             default='trec-kba-2013-centralized.gpg-key.private',
+                             help='path to gpg private key for decrypting the data')
+        self.add_file_option('--west-africa-places',
+                             default='westAfrica.csv.p',
+                             help='path to pickled trie of west african places')
+        self.add_file_option('--other-places',
+                             default='otherPlace.csv.p',
+                             help='path to pickled trie of places outside of'
+                                  'west africa')
+        self.add_file_option('--crisislex',
+                             default='CrisisLexRec.csv.p',
+                             help='path to pickled trie of crisislex terms')
+
+    def steps(self):
+        return [
+            # Load files
+            MRStep(
+                mapper_init=self.mapper_init,
+                mapper=self.mapper_get_files),
+            # Get per-file stats
+            MRStep(
+                mapper_init=self.mapper_getter_init,
+                mapper=self.mapper_get_stats,
+                combiner=self.combiner_agg_stats,
+                reducer=self.reducer_agg_stats),
+            # Reduce per-file stats to combined stats
+            MRStep(reducer=self.reducer_filter)
+        ]
 
     def mapper_init(self):
         """
         Init mapper - just logging for now
-        :return:
         """
-        self.logger = logging.getLogger()
+        logging.basicConfig(level=logging.DEBUG,
+                            format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
+                            datefmt='%m-%d %H:%M',
+                            filename='/tmp/mrtwa.log',
+                            filemode='w')
+        self.logger = logging.getLogger(__name__)
 
-    def mapper_get_files(self, line):
+
+
+    def mapper_get_files(self, _, line):
         """
         Takes a line specifying a file in an s3 bucket,
         connects to & retrieves the file
         :param str|unicode line: file name
-        :return:
+        :return: tuple of user, language, post time, and body
         """
-        parts = line[:-1].split('/')
-        url = os.path.join('http://s3.amazonaws.com', *parts[2:])
+
+        aws_prefix, aws_path = line.strip().split()[-1].split('//')
+        url = os.path.join('http://s3.amazonaws.com', aws_path)
         resp = requests.get(url)
         
         data = resp.content
-        key = 'trec-kba-2013-centralized.gpg-key.private'
-        errors, data = decrypt_and_uncompress(data, key)
+
+        if not os.path.exists(self.options.gpg_private):
+            self.logger.info('Cannot locate key: {}'.format(
+                self.options.gpg_private))
+            return
+
+        errors, data = decrypt_and_uncompress(data, self.options.gpg_private)
 
         if errors:
             self.logger.info('\n'.join(errors))
@@ -137,42 +183,28 @@ class MRTwitterWestAfricaUsers(MRJob):
             lang = tweet.lang[0].code
 
             # Tab-delimited
-            yield (None, '{}\t{}\t{}'.format(user, time, body))
-
+            yield (None, '{}\t{}\t{}\t{}'.format(user, lang, time, body))
 
     def load_gazetteers(self, filename):
         with open(filename, 'rb') as f:
             return pickle.load(f)
-    
 
     def mapper_getter_init(self):
         """
         Initialize variables used in getting mapper data
-        :return:
         """
-        self.feb_2014 = datetime.datetime(2014, 2, 1, tzinfo=dateutil.tz.tzutc())
-        self.dec_2014 = datetime.datetime(2014, 12, 1, tzinfo=dateutil.tz.tzutc())
+        self.logger = logging.getLogger(__name__)
 
+        self.feb_2014 = datetime.datetime(2014, 2, 1, tzinfo=pytz.utc)
+        self.dec_2014 = datetime.datetime(2014, 12, 1, tzinfo=pytz.utc)
         self.utc_7 = datetime.time(7, 0, 0)
 
-        self.west_africa_places = self.load_gazetteers('westAfrica.csv.p')
-        self.other_places = self.load_gazetteers('otherPlace.csv.p')
+        self.west_africa_places = self.load_gazetteers(self.options.west_africa_places)
+        self.other_places = self.load_gazetteers(self.options.other_places)
 
-        self.crisislex_grams = self.load_gazetteers('CrisisLexRec.csv.p')
+        self.crisislex_grams = self.load_gazetteers(self.options.crisislex)
 
-    def steps(self):
-        return [
-                MRStep(
-                    mapper_init=self.mapper_init,
-                    mapper=self.mapper_get_files),
-                MRStep(
-                    mapper_init=self.mapper_getter_init,
-                    mapper=self.mapper_get_stats,
-                    combiner=self.combiner_agg_stats,
-                    reducer=self.reducer_agg_stats),
 
-                MRStep(reducer=self.reducer_filter)
-                ]
 
     def mapper_get_stats(self, _, line):
         """
@@ -184,6 +216,7 @@ class MRTwitterWestAfricaUsers(MRJob):
                 is_in_west_africa_time, # 0 or 1
                 west_africa_loc_mention, # 0 or 1
                 other_loc_mention, # 0 or 1
+                crisislex_mention # 0 or 1
                 )
             )
 
@@ -193,8 +226,13 @@ class MRTwitterWestAfricaUsers(MRJob):
         7AM to 11PM are taken as daylight hours.
 
         """
-        user, time, tweet = line.split('\t')
-        
+        try:
+            user, lang, time, tweet = line.strip().split('\t')
+        except ValueError:
+            self.increment_counter('wa1', 'line_invalid', 1)
+            self.logger.debug('Got ValueError:{}'.format(line.strip()))
+            return
+
         # discard tweets out of our window of interest
         t = dateutil.parser.parse(time)
         if t < self.feb_2014 or t > self.dec_2014:
@@ -262,7 +300,11 @@ class MRTwitterWestAfricaUsers(MRJob):
     def reducer_filter(self, user, stats):
         """
         Each stats tuple contains:
-            (count, is_in_time, west_africa_mention, other_place_mention)
+            (count,
+            is_in_time,
+            west_africa_mention,
+            other_place_mention,
+            crisislex_mention)
             for a given Twitter user in the time window.
 
         Only keep users who 75% of Tweets happen in the right time zone, and that
