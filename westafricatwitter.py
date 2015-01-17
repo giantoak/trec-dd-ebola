@@ -280,4 +280,10 @@ class MRTwitterWestAfricaUsers(MRJob):
 
 
 if __name__ == '__main__':
+    # Set up tries
+    for fname in ['westAfrica.csv', 'otherPlace.csv', 'CrisisLexRec.csv']:
+        if not os.path.exists(fname+'.p'):
+            init_gazetteers(fname)
+
+    # Start Map Reduce Job
     MRTwitterWestAfricaUsers.run()
