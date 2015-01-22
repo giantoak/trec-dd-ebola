@@ -90,8 +90,8 @@ class MRTwitterWestAfricaUsers(MRJob):
     """
     <Temporary empty docstring>
     """
-    INPUT_PROTOCOL = RawValueProtocol  # Custom parse tab-delimited values
-    INTERNAL_PROTOCOL = RawValueProtocol  # Serialize messages internally
+    # INPUT_PROTOCOL = protocol.RawValueProtocol  # Custom parse tab-delimited values
+    INTERNAL_PROTOCOL = protocol.PickleProtocol  # protocol.RawValueProtocol  # Serialize messages internally
     OUTPUT_PROTOCOL = RawCSVProtocol  # Output as csv
 
     def configure_options(self):
