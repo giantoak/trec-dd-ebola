@@ -298,7 +298,7 @@ class MRTwitterWestAfricaUsers(MRJob):
     def combiner_agg_stats_within_files(self, user, tweet_tuples):
         """
         :param str|unicode user: The user who made the tweets
-        :param tuple:
+        :param tweet_tuples:
                     1,
                     is_in_time,
                     west_africa_mention,
