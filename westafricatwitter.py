@@ -295,26 +295,20 @@ class MRTwitterWestAfricaUsers(MRJob):
                      crisislex_mention,
                      ebola_mention)
 
-    def combiner_agg_stats(self, user, stats):
-        yield user, map(sum, zip(*stats))
-
-    def reducer_agg_stats(self, user, stats):
-        yield user, map(sum, zip(*stats))
-
-    def reducer_filter(self, user, stats):
+    def combiner_agg_stats_within_files(self, user, tweet_tuples):
         """
-        Each stats tuple contains:
-            (count,
-            is_in_time,
-            west_africa_mention,
-            other_place_mention,
-            crisislex_mention)
-            for a given Twitter user in the time window.
-
-        Only keep users who 75% of Tweets happen in the right time zone, and that
-        mention locations local to West Africa more than elsewhere.
-
+        :param str|unicode user: The user who made the tweets
+        :param tuple:
+                    1,
+                    is_in_time,
+                    west_africa_mention,
+                    other_place_mention,
+                    crisislex_mention,
+                    ebola_mention
+                    (this is a tuple generator)
+        :return tuple: merge all results within the file
         """
+        yield user, np.apply_along_axis(sum, 0, list(tweet_tuples))
 
         # More than .75 of the Tweets happen in the right time zone
         # More mentions happen of locations within West Africa than elsewhere
