@@ -308,7 +308,7 @@ class MRTwitterWestAfricaUsers(MRJob):
                     (this is a tuple generator)
         :return tuple: merge all results within the file
         """
-        yield user, np.apply_along_axis(sum, 0, list(tweet_tuples))
+        yield user, np.apply_along_axis(sum, 0, np.array(list(tweet_tuples)))
 
     def reducer_agg_stats_across_files(self, user, tuples_over_file):
         """
@@ -316,7 +316,7 @@ class MRTwitterWestAfricaUsers(MRJob):
         :param np.array tuples_over_file:
         :return tuple:
         """
-        tuples_over_files = np.apply_along_axis(sum, 0, list(tuples_over_file))
+        tuples_over_files = np.apply_along_axis(sum, 0, np.array(list(tuples_over_file)))
         count, is_in_time, \
         west_africa_mention, other_place_mention, \
         crisislex_mention, ebola_mention = tuples_over_files
