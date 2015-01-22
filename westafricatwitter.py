@@ -156,8 +156,8 @@ class MRTwitterWestAfricaUsers(MRJob):
         :return tuple: user as key, language, post time, and body as tuple
         """
 
-        feb_2014 = dateutil.parser.parse('2012-02-01 00:00:00+00:00')
-        dec_2014 = dateutil.parser.parse('2012-12-01 00:00:00+00:00')
+        feb_2014 = dateutil.parser.parse('2014-02-01 00:00:00+00:00')
+        dec_2014 = dateutil.parser.parse('2014-12-01 00:00:00+00:00')
 
         aws_prefix, aws_path = line.strip().split()[-1].split('//')
         url = os.path.join('http://s3.amazonaws.com', aws_path)
