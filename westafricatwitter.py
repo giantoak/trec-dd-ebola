@@ -64,7 +64,6 @@ class RawCSVProtocol(object):
     Parses object as comma-separated values, with no quote escaping.
     :param object:
     """
-
     def read(self, line):
         """
         :param line:
@@ -94,10 +93,14 @@ class MRTwitterWestAfricaUsers(MRJob):
     INTERNAL_PROTOCOL = protocol.PickleProtocol  # protocol.RawValueProtocol  # Serialize messages internally
     OUTPUT_PROTOCOL = RawCSVProtocol  # Output as csv
 
+    def load_gazetteers(self, filename):
+        with open(filename, 'rb') as f:
+            return pickle.load(f)
+
     def configure_options(self):
         """
         Configure default options needed by all jobs.
-        Critically, each job needs a copy of the key to decrypt the tweets.
+        Each job _must_have_ a copy of the key to decrypt the tweets.
         """
         super(MRTwitterWestAfricaUsers, self).configure_options()
         self.add_file_option('--gpg-private',
@@ -186,9 +189,6 @@ class MRTwitterWestAfricaUsers(MRJob):
             body = tweet.title.encode('utf8')
             lang = tweet.lang[0].code
 
-    def load_gazetteers(self, filename):
-        with open(filename, 'rb') as f:
-            return pickle.load(f)
             if feb_2014 <= tweet_time <= dec_2014:
                 self.increment_counter('wa1', 'date_valid', 1)
                 yield (user, (tweet_time, body, lang))
