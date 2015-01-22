@@ -142,15 +142,19 @@ class MRTwitterWestAfricaUsers(MRJob):
         self.increment_counter('wa1', 'date_valid', 0)
         self.increment_counter('wa1', 'date_invalid', 0)
 
-
-
-    def mapper_get_files(self, _, line):
+    def mapper_get_tweet_per_user_from_files(self, _, line):
         """
         Takes a line specifying a file in an s3 bucket,
-        connects to & retrieves the file
-        :param str|unicode line: file name
-        :return: tuple of user, language, post time, and body
+        connects to and retrieves all tweets from the file.
+        Tweets are _only_ yielded if they fall within the target date range
+        (February 1, 2014 - November 30, 2014)
+        :param _: the line number in the file listing the buckets (ignored)
+        :param str|unicode line: pseudo-tab separated date, size amd file path
+        :return tuple: user as key, language, post time, and body as tuple
         """
+
+        feb_2014 = dateutil.parser.parse('2012-02-01 00:00:00+00:00')
+        dec_2014 = dateutil.parser.parse('2012-12-01 00:00:00+00:00')
 
         aws_prefix, aws_path = line.strip().split()[-1].split('//')
         url = os.path.join('http://s3.amazonaws.com', aws_path)
@@ -176,18 +180,22 @@ class MRTwitterWestAfricaUsers(MRJob):
             #       streamcorpus_pipeline/_spinn3r_feed_storage.py#L269
             tweet = entry.feed_entry
 
-            time = tweet.last_published
+            tweet_time = dateutil.parser.parse(tweet.last_published)
             user_link = tweet.author[0].link[0].href
             user = urlparse.urlsplit(user_link).path[1:]
             body = tweet.title.encode('utf8')
             lang = tweet.lang[0].code
 
-            # Tab-delimited
-            yield (None, '{}\t{}\t{}\t{}'.format(user, lang, time, body))
-
     def load_gazetteers(self, filename):
         with open(filename, 'rb') as f:
             return pickle.load(f)
+            if feb_2014 <= tweet_time <= dec_2014:
+                self.increment_counter('wa1', 'date_valid', 1)
+                yield (user, (tweet_time, body, lang))
+            else:
+                self.increment_counter('wa1', 'date_invalid', 1)
+                self.logger.debug('Bad time:{}'.format(tweet_time))
+                # yield (user, None)
 
     def mapper_getter_init(self):
         """
