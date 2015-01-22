@@ -132,15 +132,15 @@ class MRTwitterWestAfricaUsers(MRJob):
         ]
 
     def mapper_init(self):
-        """
-        Init mapper - just logging for now
-        """
+        """Set up a logger and initialize counters"""
         logging.basicConfig(level=logging.DEBUG,
                             format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
                             datefmt='%m-%d %H:%M',
-                            filename='/tmp/mrtwa.log',
+                            filename='mrtwa.log',
                             filemode='w')
         self.logger = logging.getLogger(__name__)
+        self.increment_counter('wa1', 'date_valid', 0)
+        self.increment_counter('wa1', 'date_invalid', 0)
 
 
 
