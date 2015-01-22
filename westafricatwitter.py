@@ -310,13 +310,19 @@ class MRTwitterWestAfricaUsers(MRJob):
         """
         yield user, np.apply_along_axis(sum, 0, list(tweet_tuples))
 
-        # More than .75 of the Tweets happen in the right time zone
-        # More mentions happen of locations within West Africa than elsewhere
-        if stats[1]/float(stats[0]) > 0.75\
-                and\
-        stats[2] > stats[3]:
-
-            yield user, ','.join(map(str, stats))
+    def reducer_agg_stats_across_files(self, user, tuples_over_file):
+        """
+        :param str|unicode user: The user who made the tweet
+        :param np.array tuples_over_file:
+        :return tuple:
+        """
+        tuples_over_files = np.apply_along_axis(sum, 0, list(tuples_over_file))
+        count, is_in_time, \
+        west_africa_mention, other_place_mention, \
+        crisislex_mention, ebola_mention = tuples_over_files
+        if 1.*is_in_time/count >= 0.75 \
+                and west_africa_mention > other_place_mention:
+            yield user, ','.join([str(x) for x in tuples_over_files])
 
 
 if __name__ == '__main__':
