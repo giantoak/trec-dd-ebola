@@ -198,13 +198,15 @@ class MRTwitterWestAfricaUsers(MRJob):
                 # yield (user, None)
 
     def mapper_getter_init(self):
-        """
-        Initialize variables used in getting mapper data
-        """
+        """Initialize variables used in getting mapper data"""
+        logging.basicConfig(level=logging.DEBUG,
+                            format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
+                            datefmt='%m-%d %H:%M',
+                            filename='/tmp/mrtwa.log',
+                            filemode='a')
         self.logger = logging.getLogger(__name__)
+        self.increment_counter('wa1', 'line_invalid', 0)
 
-        self.feb_2014 = datetime.datetime(2014, 2, 1, tzinfo=pytz.utc)
-        self.dec_2014 = datetime.datetime(2014, 12, 1, tzinfo=pytz.utc)
         self.utc_7 = datetime.time(7, 0, 0)
 
         self.west_africa_places = self.load_gazetteers(self.options.west_africa_places)
