@@ -234,28 +234,22 @@ class MRTwitterWestAfricaUsers(MRJob):
                 )
         """
         try:
-            user, lang, time, tweet = line.strip().split('\t')
+            tweet_time, body, lang = tweet_tuple
         except ValueError:
             self.increment_counter('wa1', 'line_invalid', 1)
-            self.logger.debug('Got ValueError:{}'.format(line.strip()))
+            self.logger.debug('Got ValueError:{}'.format(tweet_tuple))
             return
-
-        # discard tweets out of our window of interest
-        t = dateutil.parser.parse(time)
-        if t < self.feb_2014 or t > self.dec_2014:
-            self.increment_counter('wa1', 'date_invalid', 1)
-            return
-
-        self.increment_counter('wa1', 'date_valid', 1)
 
         ###
         # Meta-data features
         ###
 
         ############################################
-        # Is the tweet in the right time window?
+        # Is the tweet after 7 AM?
         ############################################
-        is_in_time = int(t.time() > self.utc_7)
+        is_in_time = int(datetime.time(tweet_time.hour,
+                                       tweet_time.minute,
+                                       tweet_time.second) >= self.utc_7)
 
         ###
         # Text Features
@@ -275,6 +269,8 @@ class MRTwitterWestAfricaUsers(MRJob):
         ############################################
         # TODO: Mine Ebola and medical synsets from wordnet
         # TODO: Mine Ebola and medical terms from NELL - weak results so far
+        # Currently just opting for 'ebola'. More might not be worth it.
+        ebola_mention = 1 if 'ebola' in tweet_tokens else 0
 
         ############################################
         # Does the tweet contain keywords related to CrisisLex disasters
@@ -282,7 +278,7 @@ class MRTwitterWestAfricaUsers(MRJob):
         crisislex_mention = trie_subseq(tweet_tokens, self.crisislex_grams)
 
         ############################################
-        # Was the tweet made by an account associated with the disaster
+        # Was the tweet made by an account associated with the disaster?
         # Define list based on a first pass that sees how many tweets
         # related to the topic each user makes, choose a threshold.
         # Define list based on known accounts, such as CDC, doctors
@@ -296,7 +292,8 @@ class MRTwitterWestAfricaUsers(MRJob):
                      is_in_time,
                      west_africa_mention,
                      other_place_mention,
-                     crisislex_mention)
+                     crisislex_mention,
+                     ebola_mention)
 
     def combiner_agg_stats(self, user, stats):
         yield user, map(sum, zip(*stats))
