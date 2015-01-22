@@ -115,19 +115,20 @@ class MRTwitterWestAfricaUsers(MRJob):
                              help='path to pickled trie of crisislex terms')
 
     def steps(self):
+        """
+        :return list: The steps to be followed for the job
+        """
         return [
-            # Load files
+            # Load files, getting tweets keyed to users
             MRStep(
                 mapper_init=self.mapper_init,
-                mapper=self.mapper_get_files),
+                mapper=self.mapper_get_tweet_per_user_from_files),
             # Get per-file stats
             MRStep(
                 mapper_init=self.mapper_getter_init,
-                mapper=self.mapper_get_stats,
-                combiner=self.combiner_agg_stats,
-                reducer=self.reducer_agg_stats),
-            # Reduce per-file stats to combined stats
-            MRStep(reducer=self.reducer_filter)
+                mapper=self.mapper_get_user_stats_from_tweets,
+                combiner=self.combiner_agg_stats_within_files,
+                reducer=self.reducer_agg_stats_across_files)
         ]
 
     def mapper_init(self):
