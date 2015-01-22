@@ -214,27 +214,24 @@ class MRTwitterWestAfricaUsers(MRJob):
 
         self.crisislex_grams = self.load_gazetteers(self.options.crisislex)
 
-
-
-    def mapper_get_stats(self, _, line):
+    def mapper_get_user_stats_from_tweets(self, user, tweet_tuple):
         """
-        Input: stream_corpus feed_entry of single tweet
-        Output: 
-            (username,
-                (
-                count,                  # 1
-                is_in_west_africa_time, # 0 or 1
-                west_africa_loc_mention, # 0 or 1
-                other_loc_mention, # 0 or 1
-                crisislex_mention # 0 or 1
-                )
-            )
-
         Discards tweets before February 2014 and after November 2014.
-        
         West Africa time is considered to be 0 to +1 UTC.
         7AM to 11PM are taken as daylight hours.
-
+        :param str|unicode user: the username
+        :param tuple tweet_tuple: time, body, and language
+        :return tuple:
+            username,
+                (
+                count                    # 1
+                is_in_west_africa_time,  # 0 or 1
+                west_africa_loc_mention, # 0 or 1
+                other_loc_mention,       # 0 or 1
+                crisislex_mention        # 0 or 1
+                ebola_mention            # 0 or 1
+                time                     # datetime
+                )
         """
         try:
             user, lang, time, tweet = line.strip().split('\t')
