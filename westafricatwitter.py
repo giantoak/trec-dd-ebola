@@ -9,17 +9,16 @@ ebola crisis.
 This first step identifies the _users_ tweeting from West Africa. Note that this
 assumes the user has remained in place for the entire duration.
 """
-# import codecs
 import datetime
 import dateutil
 import dateutil.parser
 import logging
 from mrjob.job import MRJob
+import mrjob.protocol as protocol
 from mrjob.step import MRStep
-from mrjob.protocol import RawValueProtocol
+import numpy as np
 import os
 import cPickle as pickle
-import pytz
 import requests
 from cStringIO import StringIO
 from urllib2 import urlparse
