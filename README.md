@@ -29,10 +29,28 @@ we keep all tweets made within *P*.
 
 ## Running
 
-To run this job locally, you'll need...
-* an uncompressed list of files containing tweets, with a name like `list_of_trec_files.txt`
-* a key for decrypting this stuff, called something like `trec_decrypter.private`
+The process for executing programs that incorporate `mrjob` is laid out in
+detail in the module's [documentation](https://pythonhosted.org/mrjob/); this
+is a quick reference.
+
+### Requirements
+
+* an uncompressed list of files containing tweets, with a name like
+`list_of_trec_files.txt`
+* a key for decrypting this stuff, called something like
+`trec_decrypter.private`
 * Everything in this repository
 
-At the command line, type: `python westafricatwitter.py list_of_trec_files.txt > results.csv`
-When the job finishes running, `results.csv` should contain a list of users and some summary stats.
+### Running Locally
+
+At the command line, type: `python westafricatwitter.py list_of_trec_files.txt
+> results.csv`
+When the job finishes running, `results.csv` should contain a list of users
+and some summary stats.
+
+### Running on EC2
+
+This is *way* too large a challenge to cover in a small blurb. To keep it overly brief:
+1. Have an Amazon S3 bucket at [s3://my-bucket/](s3://my-bucket/).
+2. Make sure you've got yourself configured to use EC2 as described in the [`mrjob` documentation](https://pythonhosted.org/mrjob/guides/emr-quickstart.html).
+2. At the command line, type: `python westafricatwitter.py -r emr list_of_trec_files.txt --output-dir=s3://my-bucket/wat_results --no-output`
