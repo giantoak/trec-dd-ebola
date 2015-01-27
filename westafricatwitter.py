@@ -9,6 +9,7 @@ ebola crisis.
 This first step identifies the _users_ tweeting from West Africa. Note that this
 assumes the user has remained in place for the entire duration.
 """
+import codecs
 import datetime
 import dateutil
 import dateutil.parser
@@ -26,15 +27,16 @@ from urllib2 import urlparse
 
 # parse code
 from twokenize import simpleTokenize
-from trie import trie_append
-from trie import trie_subseq
+import marisa_trie
+# from trie import trie_append
+# from trie import trie_subseq
 
 # ingest imports
 from streamcorpus import decrypt_and_uncompress
 from streamcorpus_pipeline._spinn3r_feed_storage import ProtoStreamReader
 
 
-def init_gazetteers(filename):
+def init_gazetteer(filename):
         """
         Load newline-delimited gazetteer file at `filename` by
             - Tokenizing by whitespace
@@ -42,21 +44,34 @@ def init_gazetteers(filename):
         
         Pickles output
         """
-        def preprocess_token(t):
-            """Strip hashtags"""
-            return t.lower().lstrip('#')
+        with codecs.open(filename, 'r', 'utf8') as infile:
+            lines = list(set(line.lower().strip() for line in infile))
 
-        trie = {}
-        with open(filename) as f:
-            for line in f:
-                parts = [map(preprocess_token, x.split(' ')) + ['$']
-                         for x in line.strip().split(',')]
+        trie = marisa_trie.Trie(lines)
+        trie.save(filename+'.tr')
 
-                map(lambda x: trie_append(x, trie), parts)
-        
-        outname = filename + '.p' 
-        with open(outname, 'wb') as out: 
-            pickle.dump(trie, out)
+
+def load_gazetteer(filename):
+    trie = marisa_trie.Trie()
+    trie.load(filename)
+    return trie
+
+
+def any_word_subsequence_in_trie(tweet_tokens, trie):
+    """
+    <temporary empty docstring
+    :param list|tuple tweet_tokens:
+    :param marisa_trie.Trie trie:
+    :return bool:
+    """
+    cur_uni = tweet_tokens[-1]
+    if trie.has_keys_with_prefix(cur_uni):
+        return True
+    for i in np.arange(len(tweet_tokens)-2, -1, -1):
+        cur_uni = tweet_tokens[i] + u' '+ cur_uni
+        if trie.has_keys_with_prefix(cur_uni):
+            return True
+    return False
 
 
 class RawCSVProtocol(object):
@@ -92,10 +107,6 @@ class MRTwitterWestAfricaUsers(MRJob):
     # INPUT_PROTOCOL = protocol.RawValueProtocol  # Custom parse tab-delimited values
     INTERNAL_PROTOCOL = protocol.PickleProtocol  # protocol.RawValueProtocol  # Serialize messages internally
     OUTPUT_PROTOCOL = RawCSVProtocol  # Output as csv
-
-    def load_gazetteers(self, filename):
-        with open(filename, 'rb') as f:
-            return pickle.load(f)
 
     def configure_options(self):
         """
@@ -209,10 +220,10 @@ class MRTwitterWestAfricaUsers(MRJob):
 
         self.utc_7 = datetime.time(7, 0, 0)
 
-        self.west_africa_places = self.load_gazetteers(self.options.west_africa_places)
-        self.other_places = self.load_gazetteers(self.options.other_places)
+        self.west_africa_places = load_gazetteer(self.options.west_africa_places)
+        self.other_places = load_gazetteer(self.options.other_places)
 
-        self.crisislex_grams = self.load_gazetteers(self.options.crisislex)
+        self.crisislex_grams = load_gazetteer(self.options.crisislex)
 
     def mapper_get_user_stats_from_tweets(self, user, tweet_tuple):
         """
@@ -261,8 +272,12 @@ class MRTwitterWestAfricaUsers(MRJob):
         ############################################
         # Does the tweet mention places?
         ############################################
-        west_africa_mention = trie_subseq(tweet_tokens, self.west_africa_places)
-        other_place_mention = trie_subseq(tweet_tokens, self.other_places)
+        west_africa_mention = \
+            int(any_word_subsequence_in_trie(tweet_tokens,
+                                             self.west_africa_places))
+        other_place_mention = \
+            int(any_word_subsequence_in_trie(tweet_tokens,
+                                             self.other_places))
 
         ############################################
         # Does the tweet mention keywords or topics related to medicine/Ebola?
@@ -275,7 +290,9 @@ class MRTwitterWestAfricaUsers(MRJob):
         ############################################
         # Does the tweet contain keywords related to CrisisLex disasters
         ############################################
-        crisislex_mention = trie_subseq(tweet_tokens, self.crisislex_grams)
+        crisislex_mention = \
+            int(any_word_subsequence_in_trie(tweet_tokens,
+                                             self.crisislex_grams))
 
         ############################################
         # Was the tweet made by an account associated with the disaster?
@@ -328,8 +345,8 @@ class MRTwitterWestAfricaUsers(MRJob):
 if __name__ == '__main__':
     # Set up tries
     for fname in ['westAfrica.csv', 'otherPlace.csv', 'CrisisLexRec.csv']:
-        if not os.path.exists(fname+'.p'):
-            init_gazetteers(fname)
+        if not os.path.exists(fname+'.tr'):
+            init_gazetteer(fname)
 
     # Start Map Reduce Job
     MRTwitterWestAfricaUsers.run()
