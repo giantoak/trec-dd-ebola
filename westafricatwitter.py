@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+__author__ = 'Sam Zhang, Peter M. Landwehr'
 """
 TREC DD 2015
 Ebola domain

@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+__author__ = 'Sam Zhang'
+
 import nose
 import os, sys
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))

@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+__author__ = 'Sam Zhang'
 """
 Simple prefix tree class for fast lookup of n-grams
 """

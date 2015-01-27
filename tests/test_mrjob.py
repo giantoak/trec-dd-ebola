@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+__author__ = 'Sam Zhang'
+
 import nose
 from nose import with_setup
 
