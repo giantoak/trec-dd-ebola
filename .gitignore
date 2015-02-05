@@ -6,3 +6,5 @@ twitter-dump.log
 .idea/
 *.private
 *.p
+mrjob.aws.conf
+emr_logs/
