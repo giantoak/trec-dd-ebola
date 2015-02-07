@@ -2,9 +2,9 @@ ignore/
 ve/
 *.pyc
 *.swp
-twitter-dump.log
 .idea/
 *.private
 *.p
-mrjob.aws.conf
+mrjob_aws_creds.conf
 emr_logs/
+aws-publicdatasets-trec-kba-kba-stream-corpus-2013-centralized-ls-recursive.txt
