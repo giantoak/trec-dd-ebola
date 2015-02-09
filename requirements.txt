@@ -1,0 +1,37 @@
+# local packages
+# git+https://github.com/myleott/ark-twokenize-py.git@master#egg=twokenize
+# recommended by mrjob
+boto
+mr3po
+simplejson
+cython
+# needed for streamcorpus (often installed as requirements)
+ez_setup
+python-dateutil
+pytz
+cbor
+thrift
+yakonfig
+python-magic
+python-docx
+ftfy
+jellyfish
+pycassa
+pyaccumulo
+cql
+python-daemon
+setproctitle
+pexpect
+ipdb
+cov-core
+pytest-cov
+pytest-xdist
+pytest-timeout
+pytest-capturelog
+pytest-diffeo
+epydoc
+lockfile
+pyinotify
+doit
+backports.lzma
+requests
