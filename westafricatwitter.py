@@ -206,21 +206,28 @@ class MRTwitterWestAfricaUsers(MRJob):
         self.increment_counter('wa1', 'date_valid', 0)
         self.increment_counter('wa1', 'date_invalid', 0)
 
-    def mapper_get_tweet_per_user_from_files(self, _, line):
+        self.feb_2014 = dateutil.parser.parse('2014-02-01 00:00:00+00:00')
+        self.dec_2014 = dateutil.parser.parse('2014-12-01 00:00:00+00:00')
+
+    def mapper_get_tweets_per_user_in_date_range_from_files(self, _, line):
         """
         Takes a line specifying a file in an s3 bucket,
         connects to and retrieves all tweets from the file.
         Tweets are _only_ yielded if they fall within the target date range
         (February 1, 2014 - November 30, 2014)
+        Returned tweets are broken down based oni f they mention
+        West African features
         :param _: the line number in the file listing the buckets (ignored)
         :param str|unicode line: pseudo-tab separated date, size amd file path
         :return tuple: user as key, language, post time, and body as tuple
         """
-
-        feb_2014 = dateutil.parser.parse('2014-02-01 00:00:00+00:00')
-        dec_2014 = dateutil.parser.parse('2014-12-01 00:00:00+00:00')
-
         aws_prefix, aws_path = line.strip().split()[-1].split('//')
+        bucket_date = dateutil.parser.parse(aws_path.split('/')[-2])
+        if bucket_date < self.feb_2014 or bucket_date > self.dec_2014:
+            self.increment_counter('wa1', 'file_invalid', 1)
+            return
+
+        self.increment_counter('wa1', 'file_okay', 1)
         url = os.path.join('http://s3.amazonaws.com', aws_path)
         resp = requests.get(url)
         
@@ -250,7 +257,7 @@ class MRTwitterWestAfricaUsers(MRJob):
             body = tweet.title.encode('utf8')
             lang = tweet.lang[0].code
 
-            if feb_2014 <= tweet_time <= dec_2014:
+            if self.feb_2014 <= tweet_time < self.dec_2014:
                 self.increment_counter('wa1', 'date_valid', 1)
                 yield (user, (tweet_time, body, lang))
             else:
