@@ -5,7 +5,7 @@ TREC DD 2015
 Ebola domain
 
 The goal is to generate ~1M high recall Tweets from West Africa in the last
-9 months (from February 2014 to the end of November), during the onset of the
+10 months (from February 2014 to the end of November), during the onset of the
 ebola crisis.
 
 This first step identifies the _users_ tweeting from West Africa. Note that this
@@ -140,58 +140,6 @@ class MRTwitterWestAfricaUsers(MRJob):
                 combiner=self.combiner_agg_stats_within_files,
                 reducer=self.reducer_agg_stats_across_files)
         ]
-
-    def mapper_get_tweets_in_date_range_from_files(self, _, line):
-        """
-        Takes a line specifying a file in an s3 bucket,
-        connects to and retrieves all tweets from the file.
-        Tweets are _only_ yielded if they fall within the target date range
-        (February 1, 2014 - November 30, 2014)
-        :param _: the line number in the file listing the buckets (ignored)
-        :param str|unicode line: pseudo-tab separated date, size amd file path
-        :return tuple: tweet id as key, user, language, post time, and body as tuple
-        """
-        if not os.path.exists(self.options.gpg_private):
-            self.logger.info('Cannot locate key: {}'.format(
-                self.options.gpg_private))
-            return
-
-        feb_2014 = dateutil.parser.parse('2014-02-01 00:00:00+00:00')
-        dec_2014 = dateutil.parser.parse('2014-12-01 00:00:00+00:00')
-
-        aws_prefix, aws_path = line.strip().split()[-1].split('//')
-        bucket_date = dateutil.parser.parse(aws_path.split('/')[-2])
-
-
-
-        url = os.path.join('http://s3.amazonaws.com', aws_path)
-        resp = requests.get(url)
-        data = resp.content
-        errors, data = decrypt_and_uncompress(data, self.options.gpg_private)
-        if errors:
-            self.logger.info('\n'.join(errors))
-
-        f = StringIO(data)
-        reader = ProtoStreamReader(f)
-        for entry in reader:
-            # entries have other info, see other info here:
-            #  https://github.com/trec-kba/streamcorpus-pipeline/blob/master/
-            #       streamcorpus_pipeline/_spinn3r_feed_storage.py#L269
-            tweet = entry.feed_entry
-
-            tweet_time = dateutil.parser.parse(tweet.last_published)
-            user_link = tweet.author[0].link[0].href
-            user = urlparse.urlsplit(user_link).path[1:]
-            body = tweet.title.encode('utf8')
-            lang = tweet.lang[0].code
-
-            if feb_2014 <= tweet_time < dec_2014:
-                self.increment_counter('wa1', 'date_valid', 1)
-                yield (user, (tweet_time, body, lang, user))
-            else:
-                self.increment_counter('wa1', 'date_invalid', 1)
-                self.logger.debug('Bad time:{}'.format(tweet_time))
-                # Don't yield anything in this case.
 
     def mapper_init(self):
         """Set up a logger and initialize counters"""
