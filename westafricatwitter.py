@@ -12,24 +12,26 @@ This first step identifies the _users_ tweeting from West Africa. Note that this
 assumes the user has remained in place for the entire duration.
 """
 import datetime
+import logging
+import os
+import cPickle as pickle
+from cStringIO import StringIO
+from urllib2 import urlparse
+
 import dateutil
 import dateutil.parser
-import logging
 from mrjob.job import MRJob
 import mrjob.protocol as protocol
 from mrjob.step import MRStep
 import numpy as np
-import os
-import cPickle as pickle
 import requests
-from cStringIO import StringIO
-from urllib2 import urlparse
+
 # import zlib
 
 # parse code
 from twokenize import simpleTokenize
-from trie import trie_append
-from trie import trie_subseq
+from sam_trie import trie_append
+from sam_trie import trie_subseq
 
 # ingest imports
 from streamcorpus import decrypt_and_uncompress
