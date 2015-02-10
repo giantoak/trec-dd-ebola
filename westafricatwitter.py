@@ -63,6 +63,11 @@ def init_gazetteers(filename):
             pickle.dump(trie, out)
 
 
+def load_gazetteer(filename):
+    with open(filename, 'rb') as f:
+        return pickle.load(f)
+
+
 class RawCSVProtocol(object):
     """
     Parses object as comma-separated values, with no quote escaping.
@@ -96,10 +101,6 @@ class MRTwitterWestAfricaUsers(MRJob):
     # INPUT_PROTOCOL = protocol.RawValueProtocol  # Custom parse tab-delimited values
     INTERNAL_PROTOCOL = protocol.PickleProtocol  # protocol.RawValueProtocol  # Serialize messages internally
     OUTPUT_PROTOCOL = RawCSVProtocol  # Output as csv
-
-    def load_gazetteers(self, filename):
-        with open(filename, 'rb') as f:
-            return pickle.load(f)
 
     def configure_options(self):
         """
@@ -225,10 +226,10 @@ class MRTwitterWestAfricaUsers(MRJob):
 
         self.utc_7 = datetime.time(7, 0, 0)
 
-        self.west_africa_places = self.load_gazetteers(self.options.west_africa_places)
-        self.other_places = self.load_gazetteers(self.options.other_places)
+        self.west_africa_places = load_gazetteer(self.options.west_africa_places)
+        self.other_places = load_gazetteer(self.options.other_places)
 
-        self.crisislex_grams = self.load_gazetteers(self.options.crisislex)
+        self.crisislex_grams = load_gazetteer(self.options.crisislex)
 
     def mapper_get_user_stats_from_tweets(self, user, tweet_tuple):
         """
