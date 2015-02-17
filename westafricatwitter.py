@@ -122,13 +122,20 @@ class MRTwitterWestAfricaUsers(MRJob):
                             filename='./mrtwa.log',
                             filemode='w')
         self.logger = logging.getLogger(__name__)
-        self.increment_counter('wa1', 'file_invalid', 0)
-        self.increment_counter('wa1', 'file_okay', 0)
-        self.increment_counter('wa1', 'date_valid', 0)
-        self.increment_counter('wa1', 'date_invalid', 0)
+        self.increment_counter('wa1', 'file_date_invalid', 0)
+        self.increment_counter('wa1', 'file_date_valid', 0)
+        self.increment_counter('wa1', 'file_data_bad', 0)
+        self.increment_counter('wa1', 'tweet_date_valid', 0)
+        self.increment_counter('wa1', 'tweet_date_invalid', 0)
+
+        if not os.path.exists(self.options.gpg_private):
+            self.logger.info('Cannot locate key: {}'.format(
+                self.options.gpg_private))
+            sys.exit(1)
 
         self.feb_2014 = dateutil.parser.parse('2014-02-01 00:00:00+00:00')
         self.dec_2014 = dateutil.parser.parse('2014-12-01 00:00:00+00:00')
+
 
     def mapper_get_tweets_per_user_in_date_range_from_files(self, _, line):
         """
@@ -145,14 +152,18 @@ class MRTwitterWestAfricaUsers(MRJob):
         aws_prefix, aws_path = line.strip().split()[-1].split('//')
         bucket_date = dateutil.parser.parse(aws_path.split('/')[-2])
         if bucket_date < self.feb_2014 or bucket_date > self.dec_2014:
-            self.increment_counter('wa1', 'file_invalid', 1)
+            self.increment_counter('wa1', 'file_date_invalid', 1)
             return
 
-        self.increment_counter('wa1', 'file_okay', 1)
+        self.increment_counter('wa1', 'file_date_valid', 1)
         url = os.path.join('http://s3.amazonaws.com', aws_path)
         resp = requests.get(url)
         
         data = resp.content
+        if data is None:
+            self.logger('{}: did not retrieve any data. Skipping...\n'.format(aws_path))
+            self.increment_counter('wa1', 'file_data_bad', 1)
+            return
 
         if not os.path.exists(self.options.gpg_private):
             self.logger.info('Cannot locate key: {}'.format(
@@ -163,6 +174,10 @@ class MRTwitterWestAfricaUsers(MRJob):
 
         if errors:
             self.logger.info('\n'.join(errors))
+        if data is None:
+            self.logger('{}: did not decrypt any data. Skipping...\n'.format(aws_path))
+            self.increment_counter('wa1', 'file_data_bad', 1)
+            return
 
         f = StringIO(data)
         reader = ProtoStreamReader(f)
@@ -198,10 +213,10 @@ class MRTwitterWestAfricaUsers(MRJob):
 
         self.utc_7 = datetime.time(7, 0, 0)
 
-        self.west_africa_places = load_gazetteer(self.options.west_africa_places)
-        self.other_places = load_gazetteer(self.options.other_places)
+        self.west_africa_places = load_trie_from_pickle_file(self.options.west_africa_places)
+        self.other_places = load_trie_from_pickle_file(self.options.other_places)
 
-        self.crisislex_grams = load_gazetteer(self.options.crisislex)
+        self.crisislex_grams = load_trie_from_pickle_file(self.options.crisislex)
 
     def mapper_get_user_stats_from_tweets(self, user, tweet_tuple):
         """
@@ -246,9 +261,10 @@ class MRTwitterWestAfricaUsers(MRJob):
 
         # tokenize tweet
         tweet_tokens = simpleTokenize(body)
+        mentions = [tok[1:] for tok in tokens if len(tok) > 1 and tok[0] == '@']
 
         ############################################
-        # Does the tweet mention places?
+        # Does the tweet mention places in west africa?
         ############################################
         west_africa_mention = trie_subseq(tweet_tokens, self.west_africa_places)
         other_place_mention = trie_subseq(tweet_tokens, self.other_places)
@@ -282,7 +298,8 @@ class MRTwitterWestAfricaUsers(MRJob):
                      west_africa_mention,
                      other_place_mention,
                      crisislex_mention,
-                     ebola_mention)
+                     ebola_mention,
+                     mentions)
 
     def combiner_agg_stats_within_files(self, user, tweet_tuples):
         """
@@ -316,9 +333,9 @@ class MRTwitterWestAfricaUsers(MRJob):
 
 if __name__ == '__main__':
     # Set up tries
-    for fname in ['westAfrica.csv', 'otherPlace.csv', 'CrisisLexRec.csv']:
+    for fname in ['only_west_africa.csv', 'only_other_places.csv']:
         if not os.path.exists(fname+'.p'):
-            init_gazetteers(fname)
+            write_gazetteer_to_trie_pickle_file(fname)
 
     # Start Map Reduce Job
     MRTwitterWestAfricaUsers.run()
