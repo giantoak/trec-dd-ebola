@@ -14,7 +14,6 @@ assumes the user has remained in place for the entire duration.
 import datetime
 import logging
 import os
-import cPickle as pickle
 from cStringIO import StringIO
 from urllib2 import urlparse
 
@@ -25,47 +24,21 @@ import mrjob.protocol as protocol
 from mrjob.step import MRStep
 import numpy as np
 import requests
+import sys
 
 # import zlib
 
 # parse code
 from twokenize import simpleTokenize
-from sam_trie import trie_append
+# from sam_trie import trie_append
 from sam_trie import trie_subseq
+from sam_trie import load_trie_from_pickle_file
+from sam_trie import write_gazetteer_to_trie_pickle_file
+
 
 # ingest imports
 from streamcorpus import decrypt_and_uncompress
 from streamcorpus_pipeline._spinn3r_feed_storage import ProtoStreamReader
-
-
-def init_gazetteers(filename):
-        """
-        Load newline-delimited gazetteer file at `filename` by
-            - Tokenizing by whitespace
-            - Loading n-grams into a trie.
-        
-        Pickles output
-        """
-        def preprocess_token(t):
-            """Strip hashtags"""
-            return t.lower().lstrip('#')
-
-        trie = {}
-        with open(filename) as f:
-            for line in f:
-                parts = [map(preprocess_token, x.split(' ')) + ['$']
-                         for x in line.strip().split(',')]
-
-                map(lambda x: trie_append(x, trie), parts)
-        
-        outname = filename + '.p' 
-        with open(outname, 'wb') as out: 
-            pickle.dump(trie, out)
-
-
-def load_gazetteer(filename):
-    with open(filename, 'rb') as f:
-        return pickle.load(f)
 
 
 class RawCSVProtocol(object):
@@ -112,12 +85,11 @@ class MRTwitterWestAfricaUsers(MRJob):
                              default='trec-kba-2013-centralized.gpg-key.private',
                              help='path to gpg private key for decrypting the data')
         self.add_file_option('--west-africa-places',
-                             default='westAfrica.csv.p',
+                             default='only_west_africa.csv.p',
                              help='path to pickled trie of west african places')
         self.add_file_option('--other-places',
-                             default='otherPlace.csv.p',
-                             help='path to pickled trie of places outside of'
-                                  'west africa')
+                             default='only_other_places.csv.p',
+                             help='path to pickled trie of non-west african places')
         self.add_file_option('--crisislex',
                              default='CrisisLexRec.csv.p',
                              help='path to pickled trie of crisislex terms')
@@ -201,18 +173,18 @@ class MRTwitterWestAfricaUsers(MRJob):
             tweet = entry.feed_entry
 
             tweet_time = dateutil.parser.parse(tweet.last_published)
+            if self.feb_2014 > tweet_time or tweet_time > self.dec_2014:
+                self.increment_counter('wa1', 'tweet_date_invalid', 1)
+                self.logger.debug('Bad time:{}'.format(tweet_time))
+                continue
+
             user_link = tweet.author[0].link[0].href
             user = urlparse.urlsplit(user_link).path[1:]
             body = tweet.title.encode('utf8')
             lang = tweet.lang[0].code
 
-            if self.feb_2014 <= tweet_time < self.dec_2014:
-                self.increment_counter('wa1', 'date_valid', 1)
-                yield (user, (tweet_time, body, lang))
-            else:
-                self.increment_counter('wa1', 'date_invalid', 1)
-                self.logger.debug('Bad time:{}'.format(tweet_time))
-                # yield (user, None)
+            self.increment_counter('wa1', 'tweet_date_valid', 1)
+            yield (user, (tweet_time, body, lang))
 
     def mapper_getter_init(self):
         """Initialize variables used in getting mapper data"""

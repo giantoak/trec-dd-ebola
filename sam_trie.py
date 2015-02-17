@@ -7,6 +7,38 @@ Simple prefix tree class for fast lookup of n-grams
 # TODO: refactor trie code into a class...
 # TODO: accept tokenizer as argument, add ending delimiter internally
 
+import cPickle as pickle
+
+
+def write_gazetteer_to_trie_pickle_file(filename):
+        """
+        Load newline-delimited gazetteer file at `filename` by
+            - Tokenizing by whitespace
+            - Loading n-grams into a trie.
+
+        Pickles output
+        """
+        def preprocess_token(t):
+            """Strip hashtags"""
+            return t.lower().lstrip('#')
+
+        trie = {}
+        with open(filename) as f:
+            for line in f:
+                parts = [map(preprocess_token, x.split(' ')) + ['$']
+                         for x in line.strip().split(',')]
+
+                map(lambda x: trie_append(x, trie), parts)
+
+        outname = filename + '.p'
+        with open(outname, 'wb') as out:
+            pickle.dump(trie, out)
+
+
+def load_trie_from_pickle_file(filename):
+    with open(filename, 'rb') as f:
+        return pickle.load(f)
+
 
 def trie_append(parts, trie):
     """
