@@ -8,3 +8,4 @@ ve/
 mrjob_aws_creds.conf
 emr_logs/
 aws-publicdatasets-trec-kba-kba-stream-corpus-2013-centralized-ls-recursive.txt
+tweet_archive_lists/
