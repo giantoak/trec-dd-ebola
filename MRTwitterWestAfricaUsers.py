@@ -8,8 +8,8 @@ The goal is to generate ~1M high recall Tweets from West Africa in the last
 10 months (from February 2014 to the end of November), during the onset of the
 ebola crisis.
 
-This first step identifies the _users_ tweeting from West Africa. Note that this
-assumes the user has remained in place for the entire duration.
+This program extracts users who appear to mention west africa a moderate number of times
+and who on average tweet between 10 AM and 8 PM in UTC 0 (west african time).
 """
 import datetime
 import logging
@@ -20,20 +20,17 @@ from urllib2 import urlparse
 import dateutil
 import dateutil.parser
 from mrjob.job import MRJob
-import mrjob.protocol as protocol
+from mrjob.protocol import PickleProtocol
 from mrjob.step import MRStep
-import numpy as np
 import requests
 import sys
 
-# import zlib
-
 # parse code
-from twokenize import simpleTokenize
-# from sam_trie import trie_append
+from RawCSVProtocol import RawCSVProtocol
 from sam_trie import trie_subseq
 from sam_trie import load_trie_from_pickle_file
 from sam_trie import write_gazetteer_to_trie_pickle_file
+from twokenize import simpleTokenize
 
 
 # ingest imports
@@ -41,38 +38,12 @@ from streamcorpus import decrypt_and_uncompress
 from streamcorpus_pipeline._spinn3r_feed_storage import ProtoStreamReader
 
 
-class RawCSVProtocol(object):
-    """
-    Parses object as comma-separated values, with no quote escaping.
-    :param object:
-    """
-    def read(self, line):
-        """
-        :param line:
-        :return:
-        """
-        parts = line.split(',', 1)
-        if len(parts) == 1:
-            parts.append(None)
-
-        return tuple(parts)
-
-    def write(self, key, value):
-        """
-        Value is expected to be a string already.
-        :param key:
-        :param value:
-        """
-        vals = ','.join((key, value))
-        return vals
-
-
 class MRTwitterWestAfricaUsers(MRJob):
     """
     <Temporary empty docstring>
     """
     # INPUT_PROTOCOL = protocol.RawValueProtocol  # Custom parse tab-delimited values
-    INTERNAL_PROTOCOL = protocol.PickleProtocol  # protocol.RawValueProtocol  # Serialize messages internally
+    INTERNAL_PROTOCOL = PickleProtocol  # protocol.RawValueProtocol  # Serialize messages internally
     OUTPUT_PROTOCOL = RawCSVProtocol  # Output as csv
 
     def configure_options(self):
@@ -104,17 +75,17 @@ class MRTwitterWestAfricaUsers(MRJob):
             #     mapper=self.get_tweets_in_date_range_from_files),
             # Load files, getting tweets keyed to users
             MRStep(
-                mapper_init=self.mapper_init,
+                mapper_init=self.mapper_get_tweets_init,
                 mapper=self.mapper_get_tweets_per_user_in_date_range_from_files),
             # Get per-file stats
             MRStep(
-                mapper_init=self.mapper_getter_init,
+                mapper_init=self.mapper_get_user_init,
                 mapper=self.mapper_get_user_stats_from_tweets,
                 combiner=self.combiner_agg_stats_within_files,
                 reducer=self.reducer_agg_stats_across_files)
         ]
 
-    def mapper_init(self):
+    def mapper_get_tweets_init(self):
         """Set up a logger and initialize counters"""
         logging.basicConfig(level=logging.DEBUG,
                             format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
@@ -127,15 +98,17 @@ class MRTwitterWestAfricaUsers(MRJob):
         self.increment_counter('wa1', 'file_data_bad', 0)
         self.increment_counter('wa1', 'tweet_date_valid', 0)
         self.increment_counter('wa1', 'tweet_date_invalid', 0)
+        self.increment_counter('wa1', 'spam_count', 0)
 
         if not os.path.exists(self.options.gpg_private):
             self.logger.info('Cannot locate key: {}'.format(
                 self.options.gpg_private))
             sys.exit(1)
 
+        self.naive_feb_2014 = dateutil.parser.parse('2014-02-01')
+        self.naive_dec_2014 = dateutil.parser.parse('2014-12-01')
         self.feb_2014 = dateutil.parser.parse('2014-02-01 00:00:00+00:00')
         self.dec_2014 = dateutil.parser.parse('2014-12-01 00:00:00+00:00')
-
 
     def mapper_get_tweets_per_user_in_date_range_from_files(self, _, line):
         """
@@ -151,7 +124,7 @@ class MRTwitterWestAfricaUsers(MRJob):
         """
         aws_prefix, aws_path = line.strip().split()[-1].split('//')
         bucket_date = dateutil.parser.parse(aws_path.split('/')[-2])
-        if bucket_date < self.feb_2014 or bucket_date > self.dec_2014:
+        if bucket_date < self.naive_feb_2014 or bucket_date > self.naive_dec_2014:
             self.increment_counter('wa1', 'file_date_invalid', 1)
             return
 
@@ -193,15 +166,19 @@ class MRTwitterWestAfricaUsers(MRJob):
                 self.logger.debug('Bad time:{}'.format(tweet_time))
                 continue
 
+            if tweet.spam_probability > 0.5:
+                self.increment_counter('wa1', 'spam_count', 1)
+                continue
+
             user_link = tweet.author[0].link[0].href
-            user = urlparse.urlsplit(user_link).path[1:]
+            user = urlparse.urlsplit(user_link).path.split('@')[1]
             body = tweet.title.encode('utf8')
             lang = tweet.lang[0].code
 
             self.increment_counter('wa1', 'tweet_date_valid', 1)
             yield (user, (tweet_time, body, lang))
 
-    def mapper_getter_init(self):
+    def mapper_get_user_init(self):
         """Initialize variables used in getting mapper data"""
         logging.basicConfig(level=logging.DEBUG,
                             format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
@@ -210,6 +187,7 @@ class MRTwitterWestAfricaUsers(MRJob):
                             filemode='a')
         self.logger = logging.getLogger(__name__)
         self.increment_counter('wa1', 'line_invalid', 0)
+        self.increment_counter('wa1', 'line_valid', 0)
 
         self.utc_7 = datetime.time(7, 0, 0)
 
@@ -229,12 +207,12 @@ class MRTwitterWestAfricaUsers(MRJob):
             username,
                 (
                 count                    # 1
-                is_in_west_africa_time,  # 0 or 1
+                is_after_7AM,            # 0 or 1
                 west_africa_loc_mention, # 0 or 1
                 other_loc_mention,       # 0 or 1
                 crisislex_mention        # 0 or 1
                 ebola_mention            # 0 or 1
-                time                     # datetime
+                time_of_day_in_seconds   # int
                 )
         """
         try:
@@ -244,6 +222,8 @@ class MRTwitterWestAfricaUsers(MRJob):
             self.logger.debug('Got ValueError:{}'.format(tweet_tuple))
             return
 
+        self.increment_counter('wa1', 'line_valid', 1)
+
         ###
         # Meta-data features
         ###
@@ -251,6 +231,7 @@ class MRTwitterWestAfricaUsers(MRJob):
         ############################################
         # Is the tweet after 7 AM?
         ############################################
+
         is_in_time = int(datetime.time(tweet_time.hour,
                                        tweet_time.minute,
                                        tweet_time.second) >= self.utc_7)
@@ -261,7 +242,7 @@ class MRTwitterWestAfricaUsers(MRJob):
 
         # tokenize tweet
         tweet_tokens = simpleTokenize(body)
-        mentions = [tok[1:] for tok in tokens if len(tok) > 1 and tok[0] == '@']
+        # mentions = [tok[1:] for tok in tokens if len(tok) > 1 and tok[0] == '@']
 
         ############################################
         # Does the tweet mention places in west africa?
@@ -299,7 +280,7 @@ class MRTwitterWestAfricaUsers(MRJob):
                      other_place_mention,
                      crisislex_mention,
                      ebola_mention,
-                     mentions)
+                     tweet_time.hour*3600 + tweet_time.minute*60 + tweet_time.second)
 
     def combiner_agg_stats_within_files(self, user, tweet_tuples):
         """
@@ -310,25 +291,36 @@ class MRTwitterWestAfricaUsers(MRJob):
                     west_africa_mention,
                     other_place_mention,
                     crisislex_mention,
-                    ebola_mention
+                    ebola_mention,
+                    time_in_seconds
                     (this is a tuple generator)
-        :return tuple: merge all results within the file
+        :return tuple: user, sum of all results (*including* times)
         """
-        yield user, np.apply_along_axis(sum, 0, np.array(list(tweet_tuples)))
+        yield user, map(sum, zip(*tweet_tuples))
+
 
     def reducer_agg_stats_across_files(self, user, tuples_over_file):
         """
         :param str|unicode user: The user who made the tweet
-        :param np.array tuples_over_file:
+        :param tuple tuples_over_file:
         :return tuple:
         """
-        tuples_over_files = np.apply_along_axis(sum, 0, np.array(list(tuples_over_file)))
         count, is_in_time, \
         west_africa_mention, other_place_mention, \
-        crisislex_mention, ebola_mention = tuples_over_files
-        if 1.*is_in_time/count >= 0.75 \
-                and west_africa_mention > other_place_mention:
-            yield user, ','.join([str(x) for x in tuples_over_files])
+        crisislex_mention, ebola_mention, total_time =\
+            map(sum, zip(*tuples_over_file))
+        mean_time = 1.*total_time/count
+        self.increment_counter(user, 'count', count)
+        self.increment_counter(user, 'is_in_time', is_in_time)
+        self.increment_counter(user, 'west_africa_mention', west_africa_mention)
+        self.increment_counter(user, 'other_place_mention', other_place_mention)
+        self.increment_counter(user, 'crisislex_mention', crisislex_mention)
+        self.increment_counter(user, 'ebola_mention', ebola_mention)
+        self.increment_counter(user, 'mean_time', int(mean_time))
+        if count > 9 \
+                and west_africa_mention > 1 \
+                and 10 < mean_time/3600 < 20:
+            yield user, ','.join([str(x) for x in (count, is_in_time, west_africa_mention, other_place_mention, crisislex_mention, ebola_mention, mean_time)])
 
 
 if __name__ == '__main__':
