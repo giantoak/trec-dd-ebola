@@ -172,11 +172,12 @@ class MRTwitterWestAfricaUsers(MRJob):
 
             user_link = tweet.author[0].link[0].href
             user = urlparse.urlsplit(user_link).path.split('@')[1]
+            user_name = tweet.author[0].name.encode('utf8')
             body = tweet.title.encode('utf8')
             lang = tweet.lang[0].code
 
             self.increment_counter('wa1', 'tweet_date_valid', 1)
-            yield (user, (tweet_time, body, lang))
+            yield (user, (tweet_time, body, user_name, lang))
 
     def mapper_get_user_init(self):
         """Initialize variables used in getting mapper data"""
@@ -202,7 +203,7 @@ class MRTwitterWestAfricaUsers(MRJob):
         West Africa time is considered to be 0 to +1 UTC.
         7AM to 11PM are taken as daylight hours.
         :param str|unicode user: the username
-        :param tuple tweet_tuple: time, body, and language
+        :param tuple tweet_tuple: time, body, full user name, and language
         :return tuple:
             username,
                 (
@@ -213,10 +214,11 @@ class MRTwitterWestAfricaUsers(MRJob):
                 crisislex_mention        # 0 or 1
                 ebola_mention            # 0 or 1
                 time_of_day_in_seconds   # int
+                name_mentions_w_africa   # 0 or 1
                 )
         """
         try:
-            tweet_time, body, lang = tweet_tuple
+            tweet_time, body, user_name, lang = tweet_tuple
         except ValueError:
             self.increment_counter('wa1', 'line_invalid', 1)
             self.logger.debug('Got ValueError:{}'.format(tweet_tuple))
@@ -264,6 +266,18 @@ class MRTwitterWestAfricaUsers(MRJob):
         crisislex_mention = trie_subseq(tweet_tokens, self.crisislex_grams)
 
         ############################################
+        # Does the user have one of the three afflicted nations
+        # in its username?
+        ############################################
+        name_mentions_west_africa = 0
+        toks = user_name.replace(',', ' ').replace('.', ' ').lower().split()
+        for country in ['liberia', 'guinea']:
+            if country in toks:
+                name_mentions_west_africa = 1
+        if user_name.lower().find('sierra leone') > -1:
+            name_mentions_west_africa = 1
+
+        ############################################
         # Was the tweet made by an account associated with the disaster?
         # Define list based on a first pass that sees how many tweets
         # related to the topic each user makes, choose a threshold.
@@ -280,7 +294,8 @@ class MRTwitterWestAfricaUsers(MRJob):
                      other_place_mention,
                      crisislex_mention,
                      ebola_mention,
-                     tweet_time.hour*3600 + tweet_time.minute*60 + tweet_time.second)
+                     tweet_time.hour*3600 + tweet_time.minute*60 + tweet_time.second,
+                     name_mentions_west_africa)
 
     def combiner_agg_stats_within_files(self, user, tweet_tuples):
         """
@@ -293,6 +308,7 @@ class MRTwitterWestAfricaUsers(MRJob):
                     crisislex_mention,
                     ebola_mention,
                     time_in_seconds
+                    name_mentions_west_africa
                     (this is a tuple generator)
         :return tuple: user, sum of all results (*including* times)
         """
@@ -305,22 +321,32 @@ class MRTwitterWestAfricaUsers(MRJob):
         :param tuple tuples_over_file:
         :return tuple:
         """
-        count, is_in_time, \
-        west_africa_mention, other_place_mention, \
-        crisislex_mention, ebola_mention, total_time =\
-            map(sum, zip(*tuples_over_file))
+        tuples_over_files = map(sum, zip(*tuples_over_file))
+        count, is_in_time, west_africa_mention, other_place_mention, \
+        crisislex_mention, ebola_mention, total_time, \
+        name_mentions_west_africa = tuples_over_files
         mean_time = 1.*total_time/count
+
         self.increment_counter(user, 'count', count)
         self.increment_counter(user, 'is_in_time', is_in_time)
         self.increment_counter(user, 'west_africa_mention', west_africa_mention)
         self.increment_counter(user, 'other_place_mention', other_place_mention)
         self.increment_counter(user, 'crisislex_mention', crisislex_mention)
         self.increment_counter(user, 'ebola_mention', ebola_mention)
+        self.increment_counter(user, 'name_mentions_west_africa', name_mentions_west_africa)
         self.increment_counter(user, 'mean_time', int(mean_time))
+
+        # Yield users whose names include West African Countries most of the time.
+        if 1.*name_mentions_west_africa/count > 0.5:
+            yield user, ','.join([str(x) for x in tuples_over_file])
+
+        # Yield users with at least 10 tweets
+        # who mention West African locations at least once
+        # and have a mean tweet time between 10 AM and 8 PM, UTC 0.
         if count > 9 \
-                and west_africa_mention > 1 \
+                and west_africa_mention > 0 \
                 and 10 < mean_time/3600 < 20:
-            yield user, ','.join([str(x) for x in (count, is_in_time, west_africa_mention, other_place_mention, crisislex_mention, ebola_mention, mean_time)])
+            yield user, ','.join([str(x) for x in tuples_over_file])
 
 
 if __name__ == '__main__':
