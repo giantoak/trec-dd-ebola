@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
 __author__ = 'Sam Zhang'
 
+import os
+import sys
+
 import nose
 from nose import with_setup
 
-import os, sys
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from trie import trie_append, _trie_check, trie_subseq
+from sam_trie.trie import trie_subseq
 from twokenize import simpleTokenize
 from westafricatwitter import MRTwitterWestAfricaUsers
 

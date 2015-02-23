@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 __author__ = 'Sam Zhang'
 
+import os
+import sys
+
 import nose
-import os, sys
+
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from trie import trie_append, _trie_check, trie_subseq
+from sam_trie.trie import trie_append, _trie_check, trie_subseq
 
 def test_trie_append():
     

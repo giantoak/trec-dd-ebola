@@ -29,7 +29,7 @@ import sys
 from RawCSVProtocol import RawCSVProtocol
 from sam_trie import trie_subseq
 from sam_trie import load_trie_from_pickle_file
-from sam_trie import write_gazetteer_to_trie_pickle_file
+# from sam_trie import write_gazetteer_to_trie_pickle_file
 from twokenize import simpleTokenize
 
 
