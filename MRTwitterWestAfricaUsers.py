@@ -58,9 +58,9 @@ class MRTwitterWestAfricaUsers(MRJob):
         self.add_file_option('--west-africa-places',
                              default='only_west_africa.csv.p',
                              help='path to pickled trie of west african places')
-        self.add_file_option('--other-places',
-                             default='only_other_places.csv.p',
-                             help='path to pickled trie of non-west african places')
+        #self.add_file_option('--other-places',
+        #                     default='only_other_places.csv.p',
+        #                     help='path to pickled trie of non-west african places')
         self.add_file_option('--crisislex',
                              default='CrisisLexRec.csv.p',
                              help='path to pickled trie of crisislex terms')
@@ -193,7 +193,7 @@ class MRTwitterWestAfricaUsers(MRJob):
         self.utc_7 = datetime.time(7, 0, 0)
 
         self.west_africa_places = load_trie_from_pickle_file(self.options.west_africa_places)
-        self.other_places = load_trie_from_pickle_file(self.options.other_places)
+        # self.other_places = load_trie_from_pickle_file(self.options.other_places)
 
         self.crisislex_grams = load_trie_from_pickle_file(self.options.crisislex)
 
@@ -250,7 +250,8 @@ class MRTwitterWestAfricaUsers(MRJob):
         # Does the tweet mention places in west africa?
         ############################################
         west_africa_mention = trie_subseq(tweet_tokens, self.west_africa_places)
-        other_place_mention = trie_subseq(tweet_tokens, self.other_places)
+        other_place_mention = 0
+        # other_place_mention = trie_subseq(tweet_tokens, self.other_places)
 
         ############################################
         # Does the tweet mention keywords or topics related to medicine/Ebola?
@@ -326,34 +327,36 @@ class MRTwitterWestAfricaUsers(MRJob):
         crisislex_mention, ebola_mention, total_time, \
         name_mentions_west_africa = tuples_over_files
         mean_time = 1.*total_time/count
+        tuples_over_files = count, is_in_time, west_africa_mention,\
+                            other_place_mention, crisislex_mention,\
+                            ebola_mention, mean_time,\
+                            name_mentions_west_africa
 
-        self.increment_counter(user, 'count', count)
-        self.increment_counter(user, 'is_in_time', is_in_time)
-        self.increment_counter(user, 'west_africa_mention', west_africa_mention)
-        self.increment_counter(user, 'other_place_mention', other_place_mention)
-        self.increment_counter(user, 'crisislex_mention', crisislex_mention)
-        self.increment_counter(user, 'ebola_mention', ebola_mention)
-        self.increment_counter(user, 'name_mentions_west_africa', name_mentions_west_africa)
-        self.increment_counter(user, 'mean_time', int(mean_time))
+        # self.increment_counter(user, 'count', count)
+        # self.increment_counter(user, 'is_in_time', is_in_time)
+        # self.increment_counter(user, 'west_africa_mention', west_africa_mention)
+        # self.increment_counter(user, 'other_place_mention', other_place_mention)
+        # self.increment_counter(user, 'crisislex_mention', crisislex_mention)
+        # self.increment_counter(user, 'ebola_mention', ebola_mention)
+        # self.increment_counter(user, 'name_mentions_west_africa', name_mentions_west_africa)
+        # self.increment_counter(user, 'mean_time', int(mean_time))
 
         # Yield users whose names include West African Countries most of the time.
         if 1.*name_mentions_west_africa/count > 0.5:
-            yield user, ','.join([str(x) for x in tuples_over_file])
+            yield user, ','.join([str(x) for x in tuples_over_files])
 
         # Yield users with at least 10 tweets
-        # who mention West African locations at least once
-        # and have a mean tweet time between 10 AM and 8 PM, UTC 0.
+        # who mention West African locations at least three times
         if count > 9 \
-                and west_africa_mention > 0 \
-                and 10 < mean_time/3600 < 20:
-            yield user, ','.join([str(x) for x in tuples_over_file])
+                and west_africa_mention > 3:
+            yield user, ','.join([str(x) for x in tuples_over_files])
 
 
 if __name__ == '__main__':
     # Set up tries
-    for fname in ['only_west_africa.csv', 'only_other_places.csv']:
-        if not os.path.exists(fname+'.p'):
-            write_gazetteer_to_trie_pickle_file(fname)
+    # for fname in ['only_west_africa.csv', 'only_other_places.csv']:
+    #    if not os.path.exists(fname+'.p'):
+    #        write_gazetteer_to_trie_pickle_file(fname)
 
     # Start Map Reduce Job
     MRTwitterWestAfricaUsers.run()
