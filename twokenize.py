@@ -194,10 +194,12 @@ offEdge = r"(^|$|:|;|\s|\.|,)"  # colon here gets "(hello):" ==> "( hello ):"
 EdgePunctLeft  = re.compile(offEdge + "("+edgePunct+"+)("+notEdgePunct+")", re.UNICODE)
 EdgePunctRight = re.compile("("+notEdgePunct+")("+edgePunct+"+)" + offEdge, re.UNICODE)
 
+
 def splitEdgePunct(input):
     input = EdgePunctLeft.sub(r"\1\2 \3", input)
     input = EdgePunctRight.sub(r"\1 \2\3", input)
     return input
+
 
 # The main work of tokenizing a tweet.
 def simpleTokenize(text):
@@ -258,6 +260,7 @@ def simpleTokenize(text):
     
     return zippedStr
 
+
 def addAllnonempty(master, smaller):
     for s in smaller:
         strim = s.strip()
@@ -265,9 +268,11 @@ def addAllnonempty(master, smaller):
             master.append(strim)
     return master
 
+
 # "foo   bar " => "foo bar"
 def squeezeWhitespace(input):
     return Whitespace.sub(" ", input).strip()
+
 
 # Final pass tokenization based on special patterns
 def splitToken(token):
@@ -275,6 +280,7 @@ def splitToken(token):
     if m:
         return [m.group(1), m.group(2)]
     return [token]
+
 
 # Assume 'text' has no HTML escaping.
 def tokenize(text):
@@ -287,6 +293,7 @@ def normalizeTextForTagger(text):
     text = text.replace("&amp;", "&")
     text = HTMLParser.HTMLParser().unescape(text)
     return text
+
 
 # This is intended for raw tweet text -- we do some HTML entity unescaping before running the tagger.
 # 
