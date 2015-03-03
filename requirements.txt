@@ -5,6 +5,8 @@ boto
 mr3po
 simplejson
 cython
+# needed packages
+marisa-trie
 # needed for streamcorpus (often installed as requirements)
 ez_setup
 python-dateutil
