@@ -3,25 +3,23 @@ __author__ = 'Sam Zhang, Peter M. Landwehr'
 """
 Read in tweets. If the user or the mentioned users are in a predefined list,
 extract the edge.
+Return edges if they are over a given threshold in both directions
+Edges are yielded as soon as they pass the threshold, so all weights are minimums.
 """
 import codecs
-import datetime
 import logging
 import os
 from cStringIO import StringIO
 
-from collections import Counter
 import dateutil
 import dateutil.parser
 from mrjob.job import MRJob
 from mrjob.protocol import PickleProtocol
 from mrjob.protocol import RawValueProtocol
-from mrjob.step import MRStep
 import requests
 import sys
 
 # parse code
-from RawCSVProtocol import RawCSVProtocol
 from twokenize import simpleTokenize
 import marisa_trie
 
@@ -29,6 +27,8 @@ import marisa_trie
 from streamcorpus import decrypt_and_uncompress
 from streamcorpus_pipeline._spinn3r_feed_storage import ProtoStreamReader
 
+
+MIN_BIDIRECTIONAL_WEIGHT = 2
 
 def write_gazetteer_to_trie_pickle_file(filename):
     """
@@ -66,6 +66,7 @@ def any_word_subsequence_in_trie(tweet_tokens, trie):
             return True
     return False
 
+
 def get_edge_key_value_pair(source_uni, sink_uni):
     if source_uni < sink_uni:
         return source_uni.encode('utf8')+'@'+sink_uni.encode('utf8'), (1, 0)
@@ -79,43 +80,21 @@ class MRGetTweetGraph(MRJob):
     # INPUT_PROTOCOL = protocol.RawValueProtocol  # Custom parse tab-delimited values
     INTERNAL_PROTOCOL = PickleProtocol  # protocol.RawValueProtocol  # Serialize messages internally
     OUTPUT_PROTOCOL = RawValueProtocol  # Output as csv
-    OUTPUT_PROTOCOL = JS
 
     def configure_options(self):
         """
         Configure default options needed by all jobs.
         Each job _must_have_ a copy of the key to decrypt the tweets.
         """
-        super(MRTwitterWestAfricaUsers, self).configure_options()
+        super(MRGetTweetGraph, self).configure_options()
         self.add_file_option('--gpg-private',
                              default='trec-kba-2013-centralized.gpg-key.private',
                              help='path to gpg private key for decrypting the data')
         self.add_file_option('--desired-users',
-                             default='followerwonk/usernames.csv.tr',
+                             default='usernames.csv.tr',
                              help='path to pickled trie of desired usernames')
 
-    def steps(self):
-        """
-        :return list: The steps to be followed for the job
-        """
-        return [
-            # Load files, getting tweets in date range
-            # MRStep(
-            # mapper=self.get_tweets_in_date_range_from_files),
-            # Load files, getting tweets keyed to users
-            MRStep(
-                mapper_init=self.mapper_get_user_mention_init,
-                mapper=self.mapper_get_user_mention_edges_from_file,
-                combiner=combiner_agg_edges_within_file),
-            # Get per-file stats
-            MRStep(
-                mapper_init=self.mapper_get_user_init,
-                mapper=self.mapper_get_user_stats_from_tweets,
-                combiner=self.combiner_agg_stats_within_files,
-                reducer=self.reducer_agg_stats_across_files)
-        ]
-
-    def mapper_get_user_mention_init(self):
+    def mapper_init(self):
         """Set up a logger and initialize counters"""
         logging.basicConfig(level=logging.DEBUG,
                             format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
@@ -129,6 +108,11 @@ class MRGetTweetGraph(MRJob):
         self.increment_counter('wa1', 'tweet_date_valid', 0)
         self.increment_counter('wa1', 'tweet_date_invalid', 0)
         self.increment_counter('wa1', 'spam_count', 0)
+        self.increment_counter('wa1', 'no_mentions', 0)
+        self.increment_counter('wa1', 'has_mentions', 0)
+        self.increment_counter('wa1', 'known_user', 0)
+        self.increment_counter('wa1', 'known_mention', 0)
+        self.increment_counter('wa1', 'edge_finding_exception', 0)
 
         if not os.path.exists(self.options.gpg_private):
             self.logger.info('Cannot locate key: {}'.format(
@@ -142,7 +126,7 @@ class MRGetTweetGraph(MRJob):
 
         self.username_trie = load_trie_from_pickle_file(self.options.desired_users)
 
-    def mapper_get_user_mention_edges_from_file(self, _, line):
+    def mapper(self, _, line):
         """
         Takes a line specifying a file in an s3 bucket,
         connects to and retrieves all tweets from the file.
@@ -197,44 +181,73 @@ class MRGetTweetGraph(MRJob):
                 self.increment_counter('wa1', 'tweet_date_invalid', 1)
                 self.logger.debug('Bad time:{}'.format(tweet_time))
                 continue
+            self.increment_counter('wa1', 'tweet_date_valid', 1)
 
             if tweet.spam_probability > 0.5:
                 self.increment_counter('wa1', 'spam_count', 1)
                 continue
 
-            user_scrn_uni = tweet.author[0].name.split(' (')[0]
-            mentions_uni = [tok[1:] for tok in simpleTokenize(tweet.title) if tok[0] == '@']
+            mentions_uni = [tok[1:].lower() for tok in simpleTokenize(tweet.title) if tok[0] == '@']
+            if len(mentions_uni) == 0:
+                self.increment_counter('wa1', 'no_mentions', 1)
+                continue
 
-            if user_scrn_uni in self.username_trie:
-                for mention in mentions_uni:
-                    yield get_edge_key_value_pair(user_scrn_uni, mention)
-            else:
-                for mention in mentions_uni:
-                    if mention in self.username_trie:
+            self.increment_counter('wa1', 'has_mentions', 1)
+
+            try:
+                # user_scrn_uni = tweet.author[0].name.split(' (')[0]
+                user_scrn_uni = tweet.author[0].link[0].href.split('/')[-1].lower().decode('utf8')
+                if user_scrn_uni in self.username_trie:
+                    # self.increment_counter('u_'+user_scrn_uni, tweet.title, 1)
+                    # self.increment_counter('wa1', 'known_user', len(mentions_uni))
+                    for mention in mentions_uni:
                         yield get_edge_key_value_pair(user_scrn_uni, mention)
+                else:
+                    for mention in mentions_uni:
+                        if mention in self.username_trie:
+                            # self.increment_counter('m_'+mention+'@u_'+user_scrn_uni, tweet.title, 1)
+                            # self.increment_counter('wa1', 'known_mention', 1)
+                            yield get_edge_key_value_pair(user_scrn_uni, mention)
+            except:
+                self.increment_counter('wa1', 'edge_finding_exception', 1)
 
-    def combiner_agg_edges_within_file(self, edge_name, edge_weight_tuples):
+    def combiner(self, edge_name, edge_weight_tuples):
         """
         :param str edge_name: Alpha-sorted name of the edge
-        :param list edge_tuples: list (generator) of 0,1 and 1,0 edge weights
+        :param list edge_weight_tuples: list (generator) of 0,1 and 1,0 edge weights
         :return tuple: edge_name, combined edge weights
         """
-        yield edge_name, map(sum, zip(*edge_weight_tuples))
+        cur_in = 0
+        cur_out = 0
+        for tpl in edge_weight_tuples:
+            cur_in += tpl[0]
+            cur_out += tpl[1]
+            if cur_in >= MIN_BIDIRECTIONAL_WEIGHT and cur_out >= MIN_BIDIRECTIONAL_WEIGHT:
+                yield edge_name, (cur_in, cur_out)
 
-    def reducer_agg_edges_across_files(self, edge_name, edge_weight_tuples):
+        yield edge_name, (cur_in, cur_out)
+
+    def reducer(self, edge_name, edge_weight_tuples):
         """
         Get all edges from each user. We want to specifically keep all users
         who mentioned each other at least three times. Edges less than three can
         be dropped.
         :param str|unicode edge_name: The particular edge
-        :param list edge_tuples: list (generator) of direction weights
+        :param list edge_weight_tuples: list (generator) of direction weights
         :return tuple: None, tab-separated str of edge name and directional weights
         """
 
-        total_edge_weights = map(sum, zip(*edge_weight_tuples))
+        cur_in = 0
+        cur_out = 0
+        for tpl in edge_weight_tuples:
+            cur_in += tpl[0]
+            cur_out += tpl[1]
 
-        if total_edge_weights[0] > 3 and total_edge_weights[1] > 3:
-            yield None, '\t'.join([edge_name, str(total_edge_weights[0]), str(total_edge_weights[1])])
+            if cur_in >= MIN_BIDIRECTIONAL_WEIGHT and cur_out >= MIN_BIDIRECTIONAL_WEIGHT:
+                yield None, '\t'.join([edge_name, str(cur_in), str(cur_out)])
+
+        # if total_edge_weights[0] > 3 and total_edge_weights[1] > 3:
+        #    yield None, '\t'.join([edge_name, str(total_edge_weights[0]), str(total_edge_weights[1])])
 
 
 if __name__ == '__main__':
