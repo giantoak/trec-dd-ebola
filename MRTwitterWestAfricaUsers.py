@@ -22,12 +22,13 @@ import dateutil
 import dateutil.parser
 from mrjob.job import MRJob
 from mrjob.protocol import PickleProtocol
+from mrjob.protocol import RawValueProtocol
 from mrjob.step import MRStep
 import requests
 import sys
 
 # parse code
-from RawCSVProtocol import RawCSVProtocol
+# from RawCSVProtocol import RawCSVProtocol
 # from sam_trie import trie_subseq
 # from sam_trie import load_trie_from_pickle_file
 # from sam_trie import write_gazetteer_to_trie_pickle_file
@@ -51,7 +52,7 @@ def write_gazetteer_to_trie_pickle_file(filename):
         lines = list(set(line.lower().strip() for line in infile))
 
     trie = marisa_trie.Trie(lines)
-    trie.save(filename+'.tr')
+    trie.save(filename + '.tr')
 
 
 def load_trie_from_pickle_file(filename):
@@ -62,45 +63,19 @@ def load_trie_from_pickle_file(filename):
 
 def any_word_subsequence_in_trie(tweet_tokens, trie):
     """
-    <temporary empty docstring
-    :param list|tuple tweet_tokens:
-    :param marisa_trie.Trie trie:
-    :return bool:
+    :param list|tuple tweet_tokens: tokenized tweet
+    :param marisa_trie.Trie trie: trie of words
+    :return bool: True if some subset of the tweet's words are in the trie, else False
     """
     cur_uni = tweet_tokens[-1]
     if trie.has_keys_with_prefix(cur_uni):
         return True
-    for i in np.arange(len(tweet_tokens)-2, -1, -1):
-        cur_uni = tweet_tokens[i] + u' '+ cur_uni
+    for i in xrange(len(tweet_tokens) - 2, -1, -1):
+        cur_uni = tweet_tokens[i] + ' ' + cur_uni
         if trie.has_keys_with_prefix(cur_uni):
             return True
     return False
 
-
-class RawCSVProtocol(object):
-    """
-    Parses object as comma-separated values, with no quote escaping.
-    :param object:
-    """
-    def read(self, line):
-        """
-        :param line:
-        :return:
-        """
-        parts = line.split(',', 1)
-        if len(parts) == 1:
-            parts.append(None)
-
-        return tuple(parts)
-
-    def write(self, key, value):
-        """
-        Value is expected to be a string already.
-        :param key:
-        :param value:
-        """
-        vals = ','.join((key, value))
-        return vals
 
 class MRTwitterWestAfricaUsers(MRJob):
     """
@@ -108,7 +83,7 @@ class MRTwitterWestAfricaUsers(MRJob):
     """
     # INPUT_PROTOCOL = protocol.RawValueProtocol  # Custom parse tab-delimited values
     INTERNAL_PROTOCOL = PickleProtocol  # protocol.RawValueProtocol  # Serialize messages internally
-    OUTPUT_PROTOCOL = RawCSVProtocol  # Output as csv
+    OUTPUT_PROTOCOL = RawValueProtocol  # Output as csv
 
     def configure_options(self):
         """
@@ -122,9 +97,9 @@ class MRTwitterWestAfricaUsers(MRJob):
         self.add_file_option('--west-africa-places',
                              default='only_west_africa.csv.tr',
                              help='path to pickled trie of west african places')
-        #self.add_file_option('--other-places',
-        #                     default='only_other_places.csv.tr',
-        #                     help='path to pickled trie of non-west african places')
+        self.add_file_option('--other-places',
+                             default='only_other_places.csv.tr',
+                             help='path to pickled trie of non-west african places')
         self.add_file_option('--crisislex',
                              default='CrisisLexRec.csv.tr',
                              help='path to pickled trie of crisislex terms')
@@ -136,7 +111,7 @@ class MRTwitterWestAfricaUsers(MRJob):
         return [
             # Load files, getting tweets in date range
             # MRStep(
-            #     mapper=self.get_tweets_in_date_range_from_files),
+            # mapper=self.get_tweets_in_date_range_from_files),
             # Load files, getting tweets keyed to users
             MRStep(
                 mapper_init=self.mapper_get_tweets_init,
@@ -198,7 +173,7 @@ class MRTwitterWestAfricaUsers(MRJob):
 
         data = resp.content
         if data is None:
-            self.logger('{}: did not retrieve any data. Skipping...\n'.format(aws_path))
+            # self.logger('{}: did not retrieve any data. Skipping...\n'.format(aws_path))
             self.increment_counter('wa1', 'file_data_bad', 1)
             return
 
@@ -212,7 +187,7 @@ class MRTwitterWestAfricaUsers(MRJob):
         if errors:
             self.logger.info('\n'.join(errors))
         if data is None:
-            self.logger('{}: did not decrypt any data. Skipping...\n'.format(aws_path))
+            # self.logger('{}: did not decrypt any data. Skipping...\n'.format(aws_path))
             self.increment_counter('wa1', 'file_data_bad', 1)
             return
 
@@ -220,28 +195,41 @@ class MRTwitterWestAfricaUsers(MRJob):
         reader = ProtoStreamReader(f)
         for entry in reader:
             # entries have other info, see other info here:
-            #  https://github.com/trec-kba/streamcorpus-pipeline/blob/master/
+            # https://github.com/trec-kba/streamcorpus-pipeline/blob/master/
             #       streamcorpus_pipeline/_spinn3r_feed_storage.py#L269
             tweet = entry.feed_entry
 
             tweet_time = dateutil.parser.parse(tweet.last_published)
-            if self.feb_2014 > tweet_time or tweet_time > self.dec_2014:
-                self.increment_counter('wa1', 'tweet_date_invalid', 1)
-                self.logger.debug('Bad time:{}'.format(tweet_time))
-                continue
+            try:
+                if self.naive_feb_2014 > tweet_time or tweet_time > self.naive_dec_2014:
+                    self.increment_counter('wa1', 'tweet_date_invalid', 1)
+                    # self.logger.debug('Bad time:{}'.format(tweet_time))
+                    continue
+            except TypeError:
+                try:
+                    if self.feb_2014 > tweet_time or tweet_time > self.dec_2014:
+                        self.increment_counter('wa1', 'tweet_date_invalid', 1)
+                        # self.logger.debug('Bad time:{}'.format(tweet_time))
+                        continue
+                except:
+                    self.increment_counter('other date error', sys.exc_info()[0], 1)
+                    continue
 
             if tweet.spam_probability > 0.5:
                 self.increment_counter('wa1', 'spam_count', 1)
                 continue
 
-            user_link = tweet.author[0].link[0].href
-            user = urlparse.urlsplit(user_link).path.split('@')[1]
-            user_name = tweet.author[0].name.encode('utf8')
-            body = tweet.title.encode('utf8')
+            # user_link = tweet.author[0].link[0].href
+            # user = urlparse.urlsplit(user_link).path.split('@')[1]
+            user_name_scrn_uni = tweet.author[0].name
+            user_name_uni = ''.join(user_name_scrn_uni.split(' (')[1:])[:-1]
+            user_scrn_uni = user_name_scrn_uni.split(' (')[0]
+
+            body_uni = tweet.title
             lang = tweet.lang[0].code
 
             self.increment_counter('wa1', 'tweet_date_valid', 1)
-            yield (user, (tweet_time, body, user_name, lang))
+            yield (user_scrn_uni.encode('utf8'), (tweet_time, body_uni, user_name_uni, lang))
 
     def mapper_get_user_init(self):
         """Initialize variables used in getting mapper data"""
@@ -257,7 +245,7 @@ class MRTwitterWestAfricaUsers(MRJob):
         self.utc_7 = datetime.time(7, 0, 0)
 
         self.west_africa_places = load_trie_from_pickle_file(self.options.west_africa_places)
-        # self.other_places = load_trie_from_pickle_file(self.options.other_places)
+        self.other_places = load_trie_from_pickle_file(self.options.other_places)
 
         self.crisislex_grams = load_trie_from_pickle_file(self.options.crisislex)
 
@@ -282,7 +270,7 @@ class MRTwitterWestAfricaUsers(MRJob):
                 )
         """
         try:
-            tweet_time, body, user_name, lang = tweet_tuple
+            tweet_time, body_uni, user_name_uni, lang = tweet_tuple
         except ValueError:
             self.increment_counter('wa1', 'line_invalid', 1)
             self.logger.debug('Got ValueError:{}'.format(tweet_tuple))
@@ -307,7 +295,7 @@ class MRTwitterWestAfricaUsers(MRJob):
         ###
 
         # tokenize tweet
-        tweet_tokens = simpleTokenize(body)
+        tweet_tokens = simpleTokenize(body_uni)
         # mentions = [tok[1:] for tok in tokens if len(tok) > 1 and tok[0] == '@']
 
         ############################################
@@ -316,10 +304,10 @@ class MRTwitterWestAfricaUsers(MRJob):
         west_africa_mention = \
             int(any_word_subsequence_in_trie(tweet_tokens,
                                              self.west_africa_places))
-        other_place_mention = 0
-        # other_place_mention = \
-        #     int(any_word_subsequence_in_trie(tweet_tokens,
-        #                                      self.other_places))
+
+        other_place_mention = \
+            int(any_word_subsequence_in_trie(tweet_tokens,
+                                             self.other_places))
 
         ############################################
         # Does the tweet mention keywords or topics related to medicine/Ebola?
@@ -341,11 +329,11 @@ class MRTwitterWestAfricaUsers(MRJob):
         # in its username?
         ############################################
         name_mentions_west_africa = 0
-        toks = user_name.replace(',', ' ').replace('.', ' ').lower().split()
+        toks = user_name_uni.replace(',', ' ').replace('.', ' ').lower().split()
         for country in ['liberia', 'guinea']:
             if country in toks:
                 name_mentions_west_africa = 1
-        if user_name.lower().find('sierra leone') > -1:
+        if user_name_uni.lower().find('sierra leone') > -1:
             name_mentions_west_africa = 1
 
         ############################################
@@ -365,7 +353,7 @@ class MRTwitterWestAfricaUsers(MRJob):
                      other_place_mention,
                      crisislex_mention,
                      ebola_mention,
-                     tweet_time.hour*3600 + tweet_time.minute*60 + tweet_time.second,
+                     tweet_time.hour * 3600 + tweet_time.minute * 60 + tweet_time.second,
                      name_mentions_west_africa)
 
     def combiner_agg_stats_within_files(self, user, tweet_tuples):
@@ -385,7 +373,6 @@ class MRTwitterWestAfricaUsers(MRJob):
         """
         yield user, map(sum, zip(*tweet_tuples))
 
-
     def reducer_agg_stats_across_files(self, user, tuples_over_file):
         """
         :param str|unicode user: The user who made the tweet
@@ -393,40 +380,34 @@ class MRTwitterWestAfricaUsers(MRJob):
         :return tuple:
         """
         tuples_over_files = map(sum, zip(*tuples_over_file))
+
+        # Swap mean time for total time
         count, is_in_time, west_africa_mention, other_place_mention, \
         crisislex_mention, ebola_mention, total_time, \
         name_mentions_west_africa = tuples_over_files
-        mean_time = 1.*total_time/count
-        tuples_over_files = count, is_in_time, west_africa_mention,\
-                            other_place_mention, crisislex_mention,\
-                            ebola_mention, mean_time,\
+        mean_time = 1. * total_time / count
+        tuples_over_files = count, is_in_time, west_africa_mention, \
+                            other_place_mention, crisislex_mention, \
+                            ebola_mention, mean_time, \
                             name_mentions_west_africa
 
-        # self.increment_counter(user, 'count', count)
-        # self.increment_counter(user, 'is_in_time', is_in_time)
-        # self.increment_counter(user, 'west_africa_mention', west_africa_mention)
-        # self.increment_counter(user, 'other_place_mention', other_place_mention)
-        # self.increment_counter(user, 'crisislex_mention', crisislex_mention)
-        # self.increment_counter(user, 'ebola_mention', ebola_mention)
-        # self.increment_counter(user, 'name_mentions_west_africa', name_mentions_west_africa)
-        # self.increment_counter(user, 'mean_time', int(mean_time))
-
         # Yield users whose names include West African Countries most of the time.
-        if 1.*name_mentions_west_africa/count > 0.5:
+        if 1. * name_mentions_west_africa / count > 0.5:
             yield user, ','.join([str(x) for x in tuples_over_files])
 
         # Yield users with at least 10 tweets
         # who mention West African locations at least three times
         if count > 9 \
                 and west_africa_mention > 3:
-            yield user, ','.join([str(x) for x in tuples_over_files])
+
+            yield None, user+','+','.join([str(x) for x in tuples_over_files])
 
 
 if __name__ == '__main__':
     # Set up tries
-    for fname in ['only_west_africa.csv', 'only_other_places.csv', 'CrisisLexRec.csv']:
-        if not os.path.exists(fname+'.tr'):
-            write_gazetteer_to_trie_pickle_file(fname)
+    # for fname in ['only_west_africa.csv', 'only_other_places.csv', 'CrisisLexRec.csv']:
+    #    if not os.path.exists(fname + '.tr'):
+    #        write_gazetteer_to_trie_pickle_file(fname)
 
     # Start Map Reduce Job
     MRTwitterWestAfricaUsers.run()
