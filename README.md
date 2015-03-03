@@ -52,13 +52,12 @@ is a quick reference.
 * Everything in this repository
 
 ### Running Locally
-At the command line, type: `python westafricatwitter.py list_of_trec_files.txt
-> results.csv`
+At the command line, type: `python westafricatwitter.py list_of_trec_files.txt > results.csv`
 When the job finishes running, `results.csv` should contain a list of users
 and some summary stats.
 
 ### Running on EC2
 This is *way* too large a challenge to cover in a small blurb. To keep it overly brief:
 1. Have an Amazon S3 bucket for results at [s3://my-bucket/](s3://my-bucket/).
-2. Make sure you've got yourself configured to use EC2 as described in the [`mrjob` documentation](https://pythonhosted.org/mrjob/guides/emr-quickstart.html).
-2. At the command line, type: `python westafricatwitter.py -r emr list_of_trec_files.txt --output-dir=s3://my-bucket/wat_results --no-output --conf-path conf_files/mrjob.wat.conf`
+2. Make sure you've got yourself configured to use EC2 as described in the [`mrjob` documentation](https://pythonhosted.org/mrjob/guides/emr-quickstart.html)
+3. At the command line, type: `python westafricatwitter.py list_of_trec_files.txt -r emr -c conf_files/mrjob_wrapper.conf --output-dir=s3://my-bucket/wat_results --no-output `
