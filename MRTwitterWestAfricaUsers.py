@@ -231,17 +231,20 @@ class MRTwitterWestAfricaUsers(MRJob):
                 self.increment_counter('wa1', 'spam_count', 1)
                 continue
 
-            # user_link = tweet.author[0].link[0].href
-            # user = urlparse.urlsplit(user_link).path.split('@')[1]
-            user_name_scrn_uni = tweet.author[0].name
-            user_name_uni = ''.join(user_name_scrn_uni.split(' (')[1:])[:-1]
-            user_scrn_uni = user_name_scrn_uni.split(' (')[0]
+            try:
+                user_link = tweet.author[0].link[0].href
+                user_scrn_uni = urlparse.urlsplit(user_link).path.split('@')[1].lower()
+                user_name_scrn_uni = tweet.author[0].name
+                user_name_uni = ''.join(user_name_scrn_uni.split(' (')[1:])[:-1].lower()
+                # user_scrn_uni = user_name_scrn_uni.split(' (')[0]
 
-            body_uni = tweet.title
-            lang = tweet.lang[0].code
+                body_uni = tweet.title
+                lang = tweet.lang[0].code
 
-            self.increment_counter('wa1', 'tweet_date_valid', 1)
-            yield (user_scrn_uni.encode('utf8'), (tweet_time, body_uni, user_name_uni, lang))
+                yield (user_scrn_uni.encode('utf8'), (tweet_time, body_uni, user_name_uni, lang))
+
+            except:
+                self.increment_counter('wa1', 'other_exception', 1)
 
     def mapper_get_user_init(self):
         """Initialize variables used in getting mapper data"""
@@ -394,24 +397,17 @@ class MRTwitterWestAfricaUsers(MRJob):
         tuples_over_files = map(sum, zip(*tuples_over_file))
 
         # Swap mean time for total time
-        count, is_in_time, west_africa_mention, other_place_mention, \
-        crisislex_mention, ebola_mention, total_time, \
-        name_mentions_west_africa = tuples_over_files
+        count, is_in_time, west_africa_mention, other_place_mention, crisislex_mention, ebola_mention, total_time, name_mentions_west_africa = tuples_over_files
         mean_time = 1. * total_time / count
-        tuples_over_files = count, is_in_time, west_africa_mention, \
-                            other_place_mention, crisislex_mention, \
-                            ebola_mention, mean_time, \
-                            name_mentions_west_africa
+        tuples_over_files = count, is_in_time, west_africa_mention, other_place_mention, crisislex_mention, ebola_mention, mean_time, name_mentions_west_africa
 
         # Yield users whose names include West African Countries most of the time.
         if 1. * name_mentions_west_africa / count > 0.5:
-            yield user, ','.join([str(x) for x in tuples_over_files])
+            yield None, user+','+','.join([str(x) for x in tuples_over_files])
 
         # Yield users with at least 10 tweets
         # who mention West African locations at least three times
-        if count > 9 \
-                and west_africa_mention > 3:
-
+        if count > 9 and west_africa_mention > 3:
             yield None, user+','+','.join([str(x) for x in tuples_over_files])
 
 
