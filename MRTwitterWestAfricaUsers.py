@@ -161,9 +161,20 @@ class MRTwitterWestAfricaUsers(MRJob):
         :param str|unicode line: pseudo-tab separated date, size amd file path
         :return tuple: user as key, language, post time, and body as tuple
         """
-        aws_prefix, aws_path = line.strip().split()[-1].split('//')
-        bucket_date = dateutil.parser.parse(aws_path.split('/')[-2])
-        if bucket_date < self.naive_feb_2014 or bucket_date > self.naive_dec_2014:
+        aws_prefix, aws_path = line.strip().split('//')
+        file_date = dateutil.parser.parse(aws_path.split('/')[-2])
+
+        file_date_okay = False
+        try:
+            file_date_okay = self.naive_feb_2014 <= file_date < self.naive_dec_2014
+        except TypeError:
+            # Assume that this is caused by naive date times
+            try:
+                file_date_okay = self.feb_2014 <= file_date < self.dec_2014
+            except:
+                self.increment_counter('wa1', 'file_date_exception', 1)
+
+        if not file_date_okay:
             self.increment_counter('wa1', 'file_date_invalid', 1)
             return
 
@@ -173,7 +184,7 @@ class MRTwitterWestAfricaUsers(MRJob):
 
         data = resp.content
         if data is None:
-            # self.logger('{}: did not retrieve any data. Skipping...\n'.format(aws_path))
+            self.logger('{}: did not retrieve any data. Skipping...\n'.format(aws_path))
             self.increment_counter('wa1', 'file_data_bad', 1)
             return
 
@@ -187,7 +198,7 @@ class MRTwitterWestAfricaUsers(MRJob):
         if errors:
             self.logger.info('\n'.join(errors))
         if data is None:
-            # self.logger('{}: did not decrypt any data. Skipping...\n'.format(aws_path))
+            self.logger('{}: did not decrypt any data. Skipping...\n'.format(aws_path))
             self.increment_counter('wa1', 'file_data_bad', 1)
             return
 
@@ -200,20 +211,21 @@ class MRTwitterWestAfricaUsers(MRJob):
             tweet = entry.feed_entry
 
             tweet_time = dateutil.parser.parse(tweet.last_published)
+            tweet_time_okay = False
             try:
-                if self.naive_feb_2014 > tweet_time or tweet_time > self.naive_dec_2014:
-                    self.increment_counter('wa1', 'tweet_date_invalid', 1)
-                    # self.logger.debug('Bad time:{}'.format(tweet_time))
-                    continue
+                tweet_time_okay = self.feb_2014 <= tweet_time < self.dec_2014
             except TypeError:
+                # Assume that this is caused by naive date times
                 try:
-                    if self.feb_2014 > tweet_time or tweet_time > self.dec_2014:
-                        self.increment_counter('wa1', 'tweet_date_invalid', 1)
-                        # self.logger.debug('Bad time:{}'.format(tweet_time))
-                        continue
+                    tweet_time_okay = self.naive_feb_2014 <= tweet_time < self.naive_dec_2014
                 except:
-                    self.increment_counter('other date error', sys.exc_info()[0], 1)
-                    continue
+                    self.increment_counter('wa1', 'tweet_date_exception', 1)
+
+            if not tweet_time_okay:
+                self.increment_counter('wa1', 'tweet_date_invalid', 1)
+                self.logger.debug('Bad time:{}'.format(tweet_time))
+                continue
+            self.increment_counter('wa1', 'tweet_date_valid', 1)
 
             if tweet.spam_probability > 0.5:
                 self.increment_counter('wa1', 'spam_count', 1)
