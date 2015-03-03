@@ -30,6 +30,7 @@ from streamcorpus_pipeline._spinn3r_feed_storage import ProtoStreamReader
 
 MIN_BIDIRECTIONAL_WEIGHT = 2
 
+
 def write_gazetteer_to_trie_pickle_file(filename):
     """
     Load newline-delimited gazetteer file at `filename` by
@@ -104,9 +105,11 @@ class MRGetTweetGraph(MRJob):
         self.logger = logging.getLogger(__name__)
         self.increment_counter('wa1', 'file_date_invalid', 0)
         self.increment_counter('wa1', 'file_date_valid', 0)
+        self.increment_counter('wa1', 'file_date_exception', 0)
         self.increment_counter('wa1', 'file_data_bad', 0)
         self.increment_counter('wa1', 'tweet_date_valid', 0)
         self.increment_counter('wa1', 'tweet_date_invalid', 0)
+        self.increment_counter('wa1', 'tweet_date_exception', 0)
         self.increment_counter('wa1', 'spam_count', 0)
         self.increment_counter('wa1', 'no_mentions', 0)
         self.increment_counter('wa1', 'has_mentions', 0)
@@ -138,9 +141,20 @@ class MRGetTweetGraph(MRJob):
         :param str|unicode line: pseudo-tab separated date, size amd file path
         :return tuple: user, mentioned user
         """
-        aws_prefix, aws_path = line.strip().split()[-1].split('//')
-        bucket_date = dateutil.parser.parse(aws_path.split('/')[-2])
-        if bucket_date < self.naive_feb_2014 or bucket_date > self.naive_dec_2014:
+        aws_prefix, aws_path = line.strip().split('//')
+        file_date = dateutil.parser.parse(aws_path.split('/')[-2])
+
+        file_date_okay = False
+        try:
+            file_date_okay = self.naive_feb_2014 <= file_date < self.naive_dec_2014
+        except TypeError:
+            # Assume that this is caused by naive date times
+            try:
+                file_date_okay = self.feb_2014 <= file_date < self.dec_2014
+            except:
+                self.increment_counter('wa1', 'file_date_exception', 1)
+
+        if not file_date_okay:
             self.increment_counter('wa1', 'file_date_invalid', 1)
             return
 
@@ -177,7 +191,17 @@ class MRGetTweetGraph(MRJob):
             tweet = entry.feed_entry
 
             tweet_time = dateutil.parser.parse(tweet.last_published)
-            if self.feb_2014 > tweet_time or tweet_time > self.dec_2014:
+            tweet_time_okay = False
+            try:
+                tweet_time_okay = self.feb_2014 <= tweet_time < self.dec_2014
+            except TypeError:
+                # Assume that this is caused by naive date times
+                try:
+                    tweet_time_okay = self.naive_feb_2014 <= tweet_time < self.naive_dec_2014
+                except:
+                    self.increment_counter('wa1', 'tweet_date_exception', 1)
+
+            if not tweet_time_okay:
                 self.increment_counter('wa1', 'tweet_date_invalid', 1)
                 self.logger.debug('Bad time:{}'.format(tweet_time))
                 continue
@@ -201,7 +225,8 @@ class MRGetTweetGraph(MRJob):
                     # self.increment_counter('u_'+user_scrn_uni, tweet.title, 1)
                     # self.increment_counter('wa1', 'known_user', len(mentions_uni))
                     for mention in mentions_uni:
-                        yield get_edge_key_value_pair(user_scrn_uni, mention)
+                        if mention not in self.username_trie:
+                            yield get_edge_key_value_pair(user_scrn_uni, mention)
                 else:
                     for mention in mentions_uni:
                         if mention in self.username_trie:
@@ -245,9 +270,6 @@ class MRGetTweetGraph(MRJob):
 
             if cur_in >= MIN_BIDIRECTIONAL_WEIGHT and cur_out >= MIN_BIDIRECTIONAL_WEIGHT:
                 yield None, '\t'.join([edge_name, str(cur_in), str(cur_out)])
-
-        # if total_edge_weights[0] > 3 and total_edge_weights[1] > 3:
-        #    yield None, '\t'.join([edge_name, str(total_edge_weights[0]), str(total_edge_weights[1])])
 
 
 if __name__ == '__main__':
