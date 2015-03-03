@@ -14,14 +14,22 @@ Guinea, Liberia, and Sierra Leone.
 
 In general, our method is to use [mrjob](https://pythonhosted.org/mrjob/)
 to collect and aggregate statistics from a number of tweets and twitter users
-in the corpus. On our first pass, we select:
+in the corpus. We've written a few programs to help with this:
+* `MRTwitterWestAfricaUsers.py` collects usernames and counts of the times that they reference:
+  * locations exclusively in West Africa
+  * mentions of "ebola"
+  * mentions of disaster-related terms
+* `MRGetTweetGraph.py` to get the network of mentions for a list of users.
+* `MRGetTweetsByUsers.py` to get all tweets by a list of users. (This is a MapReduce operation with no reducer...)
+
+
+On our first pass, we select:
 * tweets from locations within West Africa.
 * tweets mentioning locations exclusively associated with West Africa
 
 We use these tweets to build an index of twitter counts:
 * those that tweet from within West Africa
 * those 
-
 
 
 From these stats, we select...
@@ -61,3 +69,9 @@ This is *way* too large a challenge to cover in a small blurb. To keep it overly
 1. Have an Amazon S3 bucket for results at [s3://my-bucket/](s3://my-bucket/).
 2. Make sure you've got yourself configured to use EC2 as described in the [`mrjob` documentation](https://pythonhosted.org/mrjob/guides/emr-quickstart.html)
 3. At the command line, type: `python westafricatwitter.py list_of_trec_files.txt -r emr -c conf_files/mrjob_wrapper.conf --output-dir=s3://my-bucket/wat_results --no-output `
+
+
+## Run Times on EC2
+EC2 run times vary a bit depending on settings. General notes:
+* Bootstrapping takes roughly 1600 seconds. (26 minutes and 40 seconds)
+* For `MRGetTweetGraph.py`,the base run time for a file roughly 100 seconds. (1 minute and 40 seconds.) *This is assuming a linear scaling for `m1.large` boxes*, something that must be verified with additional runs.
