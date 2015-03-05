@@ -20,6 +20,7 @@ from urllib2 import urlparse
 
 import dateutil
 import dateutil.parser
+# from mrjob.emr import S3Filesystem
 from mrjob.job import MRJob
 from mrjob.protocol import PickleProtocol
 from mrjob.protocol import RawValueProtocol
@@ -161,7 +162,8 @@ class MRTwitterWestAfricaUsers(MRJob):
         :param str|unicode line: pseudo-tab separated date, size amd file path
         :return tuple: user as key, language, post time, and body as tuple
         """
-        aws_prefix, aws_path = line.strip().split('//')
+        cur_line = line.strip()
+        aws_prefix, aws_path = cur_line.split('//')
         file_date = dateutil.parser.parse(aws_path.split('/')[-2])
 
         file_date_okay = False
