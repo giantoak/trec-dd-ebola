@@ -65,15 +65,17 @@ def load_trie_from_pickle_file(filename):
 def any_word_subsequence_in_trie(tweet_tokens, trie):
     """
     :param list|tuple tweet_tokens: tokenized tweet
-    :param marisa_trie.Trie trie: trie of words
-    :return bool: True if some subset of the tweet's words are in the trie, else False
+    :param marisa_trie.Trie: trie
+    :return bool: True if some subset of the tweet's words are in trie, else False
     """
+    if len(tweet_tokens) == 0:
+        return False
     cur_uni = tweet_tokens[-1]
-    if trie.has_keys_with_prefix(cur_uni):
+    if len(trie.prefixes(cur_uni)) > 0:
         return True
     for i in xrange(len(tweet_tokens) - 2, -1, -1):
         cur_uni = tweet_tokens[i] + ' ' + cur_uni
-        if trie.has_keys_with_prefix(cur_uni):
+        if len(trie.prefixes(cur_uni)) > 0:
             return True
     return False
 
