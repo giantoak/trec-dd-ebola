@@ -188,13 +188,13 @@ class MRTwitterWestAfricaUsers(MRJob):
 
         data = resp.content
         if data is None:
-            self.logger('{}: did not retrieve any data. Skipping...\n'.format(aws_path))
+            self.logger.info('{}: did not retrieve any data. Skipping...\n'.format(aws_path))
             self.increment_counter('wa1', 'file_data_bad', 1)
             return
 
         if not os.path.exists(self.options.gpg_private):
-            self.logger.info('Cannot locate key: {}'.format(
-                self.options.gpg_private))
+            self.logger.info('Cannot locate key: {}'.format(self.options.gpg_private))
+            self.increment_counter('wa1', 'missing_key', 1)
             return
 
         errors, data = decrypt_and_uncompress(data, self.options.gpg_private)
@@ -202,7 +202,7 @@ class MRTwitterWestAfricaUsers(MRJob):
         if errors:
             self.logger.info('\n'.join(errors))
         if data is None:
-            self.logger('{}: did not decrypt any data. Skipping...\n'.format(aws_path))
+            self.logger.info('{}: did not decrypt any data. Skipping...\n'.format(aws_path))
             self.increment_counter('wa1', 'file_data_bad', 1)
             return
 
