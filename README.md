@@ -75,4 +75,5 @@ This is *way* too large a challenge to cover in a small blurb. To keep it overly
 EC2 run times vary a bit depending on settings. General notes:
 * Bootstrapping takes roughly 1600 seconds. (26 minutes and 40 seconds)
 * For `MRGetTweetGraph.py`,the base run time for a file roughly 100 seconds. (1 minute and 40 seconds.) *This is assuming a linear scaling for `m1.large` boxes*, something that must be verified with additional runs.
-* For `MRTwitterWestAfricaUsers.py`, 35000 files can be processed in roughly 888150 seconds (246.7 hours) of CPU time. An individual file takes roughly 25.4 seconds of CPU time.
+* For `MRTwitterWestAfricaUsers.py`, 35000 files can be processed in roughly 4,675,028 seconds (246.7 hours) of CPU time. An individual file takes roughly 25.4 seconds of CPU time. (Run on 10(?) cc2.8xlarge instances) (This is ONLY cpu time, so is an undercount.)
+* For `MRTwitterWestAfricaUsers.py`, 141,853 files can be processed in roughly  4,675,027,690 seconds (1,298 hours). An individual file takes roughly 33 seconds of CPU time. (Run on 10 m1.xlarge core instances and 70 m1.xlarge task instances.)
