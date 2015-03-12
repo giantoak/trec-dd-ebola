@@ -164,7 +164,7 @@ class MRGetTweetGraph(MRJob):
 
         data = resp.content
         if data is None:
-            self.logger('{}: did not retrieve any data. Skipping...\n'.format(aws_path))
+            self.logger.info('{}: did not retrieve any data. Skipping...\n'.format(aws_path))
             self.increment_counter('wa1', 'file_data_bad', 1)
             return
 
@@ -178,7 +178,7 @@ class MRGetTweetGraph(MRJob):
         if errors:
             self.logger.info('\n'.join(errors))
         if data is None:
-            self.logger('{}: did not decrypt any data. Skipping...\n'.format(aws_path))
+            self.logger.info('{}: did not decrypt any data. Skipping...\n'.format(aws_path))
             self.increment_counter('wa1', 'file_data_bad', 1)
             return
 
