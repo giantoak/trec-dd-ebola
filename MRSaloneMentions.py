@@ -124,9 +124,7 @@ class MRSaloneMentions(MRJob):
                     yield None, entry
                 elif 'sierraleone' in tokens:
                     yield None, entry
-                elif 'lol' in tokens:
-                    yield None, entry
-                
+
                 self.increment_counter('wa1', 'valid_tweets', 1)
 
             except:
