@@ -11,7 +11,7 @@ ebola crisis.
 This program extracts users who appear to mention west africa a moderate number of times
 and who on average tweet between 10 AM and 8 PM in UTC 0 (west african time).
 """
-import codecs
+# import codecs
 import logging
 import os
 from cStringIO import StringIO
@@ -44,7 +44,7 @@ class MRGetUsersUsingKeywords(MRJob):
         Configure default options needed by all jobs.
         Each job _must_have_ a copy of the key to decrypt the tweets.
         """
-        super(MRTwitterWestAfricaUsers, self).configure_options()
+        super(MRGetUsersUsingKeywords, self).configure_options()
         self.add_file_option('--gpg-private',
                              default='trec-kba-2013-centralized.gpg-key.private',
                              help='path to gpg private key for decrypting the data')
@@ -71,7 +71,7 @@ class MRGetUsersUsingKeywords(MRJob):
                 self.options.gpg_private))
             sys.exit(1)
 
-        self.keyword_list = [x.strip() for x in open(self.options.keyword_file, 'r')]
+        self.keywords = [x.strip() for x in open(self.options.keyword_file, 'r')]
 
     def mapper(self, _, line):
         """
@@ -133,7 +133,6 @@ class MRGetUsersUsingKeywords(MRJob):
             except:
                 self.increment_counter('wa1', 'other_exception', 1)
 
-
     def combiner(self, user, tweet_tuples):
         """
         Combine all tuples within a file.
@@ -171,4 +170,4 @@ if __name__ == '__main__':
     #        write_gazetteer_to_trie_pickle_file(fname)
 
     # Start Map Reduce Job
-    MRTwitterWestAfricaUsers.run()
+    MRGetUsersUsingKeywords.run()
