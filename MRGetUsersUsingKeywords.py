@@ -109,29 +109,32 @@ class MRGetUsersUsingKeywords(MRJob):
 
         f = StringIO(data)
         reader = ProtoStreamReader(f)
-        for entry in reader:
-            # entries have other info, see other info here:
-            # https://github.com/trec-kba/streamcorpus-pipeline/blob/master/
-            #       streamcorpus_pipeline/_spinn3r_feed_storage.py#L269
-            tweet = entry.feed_entry
-            if tweet.spam_probability > 0.5:
-                self.increment_counter('wa1', 'spam_count', 1)
-                continue
+        try:
+            for entry in reader:
+                # entries have other info, see other info here:
+                # https://github.com/trec-kba/streamcorpus-pipeline/blob/master/
+                #       streamcorpus_pipeline/_spinn3r_feed_storage.py#L269
+                tweet = entry.feed_entry
+                if tweet.spam_probability > 0.5:
+                    self.increment_counter('wa1', 'spam_count', 1)
+                    continue
 
-            try:
-                user_link = tweet.author[0].link[0].href
-                user_scrn_uni = urlparse.urlsplit(user_link).path.split('@')[1].lower()
-                # user_name_scrn_uni = tweet.author[0].name
-                # user_name_uni = ''.join(user_name_scrn_uni.split(' (')[1:])[:-1].lower()
-                # user_scrn_uni = user_name_scrn_uni.split(' (')[0]
+                try:
+                    user_link = tweet.author[0].link[0].href
+                    user_scrn_uni = urlparse.urlsplit(user_link).path.split('@')[1].lower()
+                    # user_name_scrn_uni = tweet.author[0].name
+                    # user_name_uni = ''.join(user_name_scrn_uni.split(' (')[1:])[:-1].lower()
+                    # user_scrn_uni = user_name_scrn_uni.split(' (')[0]
 
-                # When tokenizing, strip hashmarks from hashtags
-                tokens = set([x[1:] if x[0] == '#' else x for x in simpleTokenize(tweet.title.lower())])
+                    # When tokenizing, strip hashmarks from hashtags
+                    tokens = set([x[1:] if x[0] == '#' else x for x in simpleTokenize(tweet.title.lower())])
 
-                yield (user_scrn_uni.encode('utf8'), [1] + [1 if x in tokens else 0 for x in self.keywords])
+                    yield (user_scrn_uni.encode('utf8'), [1] + [1 if x in tokens else 0 for x in self.keywords])
 
-            except:
-                self.increment_counter('wa1', 'other_exception', 1)
+                except Exception as e:
+                    self.increment_counter('line_exception', type(e).__name__, 1)
+        except Exception as e:
+            self.increment_counter('file_exception', type(e).__name__, 1)
 
     def combiner(self, user, tweet_tuples):
         """
