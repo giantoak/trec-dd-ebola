@@ -139,31 +139,34 @@ class MRGetUsersUsingKeywords(MRJob):
     def combiner(self, user, tweet_tuples):
         """
         Combine all tuples within a file.
+        A small hack for speed: tuples are _only_ yielded *if* they have at least
+        one value greated than zero.
+        This means we get an undercount of the user's total volume of tweets!
         :param str|unicode user: The user who made the tweets
         :param tweet_tuples:
                     1,
                     (all other keywords in the list)
         :return tuple: user, sum of all results (*including* times)
         """
-        yield user, map(sum, zip(*tweet_tuples))
-
-    def reducer(self, user, tuples_over_file):
-        """
-        We *only* yield results for users with nonzero results.
-        THat should significantly reduce the amount of output data.
-        :param str|unicode user: The user who made the tweet
-        :param tuple tuples_over_file: aggregated tweet tuples fromm the combiner
-        :return tuple:
-        """
-        tuples_over_files = map(sum, zip(*tuples_over_file))
+        tuples_over_file = map(sum, zip(*tweet_tuples))
         is_nonzero = False
-        for val in tuples_over_files[1:]:
+        for val in tuples_over_file[1:]:
             if val > 0:
                 is_nonzero = True
                 break
 
         if is_nonzero:
-            yield None, user+','+','.join([str(x) for x in tuples_over_files])
+            yield user, tuples_over_file
+
+    def reducer(self, user, tuples_over_file):
+        """
+        We *only* yield results for users with nonzero results. (See combiner.)
+        :param str|unicode user: The user who made the tweet
+        :param tuple tuples_over_file: aggregated tweet tuples fromm the combiner
+        :return tuple:
+        """
+        tuples_over_files = map(sum, zip(*tuples_over_file))
+        yield None, user+','+','.join([str(x) for x in tuples_over_files])
 
 
 if __name__ == '__main__':
