@@ -11,7 +11,6 @@ ebola crisis.
 This program extracts users who appear to mention west africa a moderate number of times
 and who on average tweet between 10 AM and 8 PM in UTC 0 (west african time).
 """
-# import codecs
 import logging
 import os
 from cStringIO import StringIO
@@ -85,7 +84,11 @@ class MRGetUsersUsingKeywords(MRJob):
         cur_line = line.strip()
         aws_prefix, aws_path = cur_line.split('//')
         url = os.path.join('http://s3.amazonaws.com', aws_path)
-        resp = requests.get(url)
+
+        try:
+            resp = requests.get(url)
+        except Exception as e:
+            self.increment_counter('resp_exception', type(e).__name__, 1)
 
         data = resp.content
         if data is None:
@@ -128,8 +131,9 @@ class MRGetUsersUsingKeywords(MRJob):
 
                     # When tokenizing, strip hashmarks from hashtags
                     tokens = set([x[1:] if x[0] == '#' else x for x in simpleTokenize(tweet.title.lower())])
-
-                    yield (user_scrn_uni.encode('utf8'), [1] + [1 if x in tokens else 0 for x in self.keywords])
+                    out_vals = [1 if x in tokens else 0 for x in self.keywords]
+                    if sum(out_vals) > 0:
+                        yield (user_scrn_uni.encode('utf8'), [1] + out_vals)
 
                 except Exception as e:
                     self.increment_counter('line_exception', type(e).__name__, 1)
@@ -140,7 +144,7 @@ class MRGetUsersUsingKeywords(MRJob):
         """
         Combine all tuples within a file.
         A small hack for speed: tuples are _only_ yielded *if* they have at least
-        one value greated than zero.
+        one value greated than zero. (See reducer)
         This means we get an undercount of the user's total volume of tweets!
         :param str|unicode user: The user who made the tweets
         :param tweet_tuples:
@@ -148,21 +152,13 @@ class MRGetUsersUsingKeywords(MRJob):
                     (all other keywords in the list)
         :return tuple: user, sum of all results (*including* times)
         """
-        tuples_over_file = map(sum, zip(*tweet_tuples))
-        is_nonzero = False
-        for val in tuples_over_file[1:]:
-            if val > 0:
-                is_nonzero = True
-                break
-
-        if is_nonzero:
-            yield user, tuples_over_file
+        yield user, map(sum, zip(*tweet_tuples))
 
     def reducer(self, user, tuples_over_file):
         """
-        We *only* yield results for users with nonzero results. (See combiner.)
+        We *only* yield results for users with nonzero results. (See reducer.)
         :param str|unicode user: The user who made the tweet
-        :param tuple tuples_over_file: aggregated tweet tuples fromm the combiner
+        :param tuple tuples_over_file: aggregated tweet tuples from the combiner
         :return tuple:
         """
         tuples_over_files = map(sum, zip(*tuples_over_file))
