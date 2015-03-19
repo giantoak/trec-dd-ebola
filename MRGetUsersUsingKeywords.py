@@ -90,6 +90,7 @@ class MRGetUsersUsingKeywords(MRJob):
             resp = requests.get(url)
         except Exception as e:
             self.increment_counter('resp_exception', type(e).__name__, 1)
+            return
 
         data = resp.content
         if data is None:
