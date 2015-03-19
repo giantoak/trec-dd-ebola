@@ -71,6 +71,7 @@ class MRGetUsersUsingKeywords(MRJob):
             sys.exit(1)
 
         self.keywords = [x.strip() for x in open(self.options.keyword_file, 'r')]
+        self.null_thresh = 1000000
 
     def mapper(self, _, line):
         """
@@ -112,6 +113,7 @@ class MRGetUsersUsingKeywords(MRJob):
 
         f = StringIO(data)
         reader = ProtoStreamReader(f)
+        null_tweets = 0
         try:
             for entry in reader:
                 # entries have other info, see other info here:
@@ -121,7 +123,6 @@ class MRGetUsersUsingKeywords(MRJob):
                 if tweet.spam_probability > 0.5:
                     self.increment_counter('wa1', 'spam_count', 1)
                     continue
-
                 try:
                     user_link = tweet.author[0].link[0].href
                     user_scrn_uni = urlparse.urlsplit(user_link).path.split('@')[1].lower()
@@ -134,11 +135,20 @@ class MRGetUsersUsingKeywords(MRJob):
                     out_vals = [1 if x in tokens else 0 for x in self.keywords]
                     if sum(out_vals) > 0:
                         yield (user_scrn_uni.encode('utf8'), [1] + out_vals)
+                    else:
+                        null_tweets += 1
+                        if null_tweets >= self.null_thresh:
+                            yield ('Null User', [null_tweets] + [0]*len(self.keywords))
+                            null_tweets = 0
 
                 except Exception as e:
                     self.increment_counter('line_exception', type(e).__name__, 1)
+                    null_tweets += 1
         except Exception as e:
             self.increment_counter('file_exception', type(e).__name__, 1)
+
+        if null_tweets > 0:
+            yield ('Null User', [null_tweets] + [0]*len(self.keywords))
 
     def combiner(self, user, tweet_tuples):
         """
