@@ -50,6 +50,9 @@ class MRGetUsersUsingKeywords(MRJob):
         self.add_file_option('--keyword-file',
                              default='seed_keywords.csv',
                              help='path to list of keywords')
+        self.add_file_option('--known-user-file',
+                             default='seed_usernames.csv',
+                             help='path to list of known usernames')
 
     def mapper_init(self):
         """Set up a logger, counters, and a set of keywords"""
@@ -71,6 +74,7 @@ class MRGetUsersUsingKeywords(MRJob):
             sys.exit(1)
 
         self.keywords = [x.strip() for x in open(self.options.keyword_file, 'r')]
+        self.known_users = set(x.stri() for x in open(self.option.known_user_file, 'r'))
         self.null_thresh = 1000000
 
     def mapper(self, _, line):
@@ -127,15 +131,20 @@ class MRGetUsersUsingKeywords(MRJob):
                 try:
                     user_link = tweet.author[0].link[0].href
                     user_scrn_uni = urlparse.urlsplit(user_link).path.split('@')[1].lower()
+                    user_scrn_encoded = user_scrn_uni.encode('utf8')
                     # user_name_scrn_uni = tweet.author[0].name
                     # user_name_uni = ''.join(user_name_scrn_uni.split(' (')[1:])[:-1].lower()
                     # user_scrn_uni = user_name_scrn_uni.split(' (')[0]
+
+                    # Don't check tweets by known users
+                    if user_scrn_encoded in self.known_users:
+                        continue
 
                     # When tokenizing, strip hashmarks from hashtags
                     tokens = set([x[1:] if x[0] == '#' else x for x in simpleTokenize(tweet.title.lower())])
                     out_vals = [1 if x in tokens else 0 for x in self.keywords]
                     if sum(out_vals) > 0:
-                        yield (user_scrn_uni.encode('utf8'), [1] + out_vals)
+                        yield (user_scrn_encoded, [1] + out_vals)
                     else:
                         null_tweets += 1
                         if null_tweets >= self.null_thresh:
