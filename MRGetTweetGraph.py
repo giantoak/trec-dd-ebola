@@ -11,8 +11,6 @@ import logging
 import os
 from cStringIO import StringIO
 
-import dateutil
-import dateutil.parser
 from mrjob.job import MRJob
 from mrjob.protocol import PickleProtocol
 from mrjob.protocol import RawValueProtocol
@@ -122,12 +120,13 @@ class MRGetTweetGraph(MRJob):
                 self.options.gpg_private))
             sys.exit(1)
 
-        self.naive_feb_2014 = dateutil.parser.parse('2014-02-01')
-        self.naive_dec_2014 = dateutil.parser.parse('2014-12-01')
-        self.feb_2014 = dateutil.parser.parse('2014-02-01 00:00:00+00:00')
-        self.dec_2014 = dateutil.parser.parse('2014-12-01 00:00:00+00:00')
+        # self.naive_feb_2014 = dateutil.parser.parse('2014-02-01')
+        # self.naive_dec_2014 = dateutil.parser.parse('2014-12-01')
+        # self.feb_2014 = dateutil.parser.parse('2014-02-01 00:00:00+00:00')
+        # self.dec_2014 = dateutil.parser.parse('2014-12-01 00:00:00+00:00')
 
-        self.username_trie = load_trie_from_pickle_file(self.options.desired_users)
+        self.username_set = set(x.strip() for x in open(self.options.desired_users))
+        # self.username_trie = load_trie_from_pickle_file(self.options.desired_users)
 
     def mapper(self, _, line):
         """
@@ -142,27 +141,15 @@ class MRGetTweetGraph(MRJob):
         :return tuple: user, mentioned user
         """
         aws_prefix, aws_path = line.strip().split('//')
-        file_date = dateutil.parser.parse(aws_path.split('/')[-2])
+        url = os.path.join('http://s3.amazonaws.com', aws_path)
 
-        file_date_okay = False
         try:
-            file_date_okay = self.naive_feb_2014 <= file_date < self.naive_dec_2014
-        except TypeError:
-            # Assume that this is caused by naive date times
-            try:
-                file_date_okay = self.feb_2014 <= file_date < self.dec_2014
-            except:
-                self.increment_counter('wa1', 'file_date_exception', 1)
-
-        if not file_date_okay:
-            self.increment_counter('wa1', 'file_date_invalid', 1)
+            resp = requests.get(url)
+            data = resp.content
+        except Exception as e:
+            self.increment_counter('resp_exception', type(e).__name__, 1)
             return
 
-        self.increment_counter('wa1', 'file_date_valid', 1)
-        url = os.path.join('http://s3.amazonaws.com', aws_path)
-        resp = requests.get(url)
-
-        data = resp.content
         if data is None:
             self.logger.info('{}: did not retrieve any data. Skipping...\n'.format(aws_path))
             self.increment_counter('wa1', 'file_data_bad', 1)
@@ -190,23 +177,6 @@ class MRGetTweetGraph(MRJob):
             #       streamcorpus_pipeline/_spinn3r_feed_storage.py#L269
             tweet = entry.feed_entry
 
-            tweet_time = dateutil.parser.parse(tweet.last_published)
-            tweet_time_okay = False
-            try:
-                tweet_time_okay = self.feb_2014 <= tweet_time < self.dec_2014
-            except TypeError:
-                # Assume that this is caused by naive date times
-                try:
-                    tweet_time_okay = self.naive_feb_2014 <= tweet_time < self.naive_dec_2014
-                except:
-                    self.increment_counter('wa1', 'tweet_date_exception', 1)
-
-            if not tweet_time_okay:
-                self.increment_counter('wa1', 'tweet_date_invalid', 1)
-                self.logger.debug('Bad time:{}'.format(tweet_time))
-                continue
-            self.increment_counter('wa1', 'tweet_date_valid', 1)
-
             if tweet.spam_probability > 0.5:
                 self.increment_counter('wa1', 'spam_count', 1)
                 continue
@@ -221,15 +191,15 @@ class MRGetTweetGraph(MRJob):
             try:
                 # user_scrn_uni = tweet.author[0].name.split(' (')[0]
                 user_scrn_uni = tweet.author[0].link[0].href.split('/')[-1].lower().decode('utf8')
-                if user_scrn_uni in self.username_trie:
+                if user_scrn_uni in self.username_set:
                     # self.increment_counter('u_'+user_scrn_uni, tweet.title, 1)
                     # self.increment_counter('wa1', 'known_user', len(mentions_uni))
                     for mention in mentions_uni:
-                        if mention not in self.username_trie:
+                        if mention not in self.username_set:
                             yield get_edge_key_value_pair(user_scrn_uni, mention)
                 else:
                     for mention in mentions_uni:
-                        if mention in self.username_trie:
+                        if mention in self.username_set:
                             # self.increment_counter('m_'+mention+'@u_'+user_scrn_uni, tweet.title, 1)
                             # self.increment_counter('wa1', 'known_mention', 1)
                             yield get_edge_key_value_pair(user_scrn_uni, mention)
@@ -242,15 +212,9 @@ class MRGetTweetGraph(MRJob):
         :param list edge_weight_tuples: list (generator) of 0,1 and 1,0 edge weights
         :return tuple: edge_name, combined edge weights
         """
-        cur_in = 0
-        cur_out = 0
-        for tpl in edge_weight_tuples:
-            cur_in += tpl[0]
-            cur_out += tpl[1]
-            if cur_in >= MIN_BIDIRECTIONAL_WEIGHT and cur_out >= MIN_BIDIRECTIONAL_WEIGHT:
-                yield edge_name, (cur_in, cur_out)
-
-        yield edge_name, (cur_in, cur_out)
+        cur_in, cur_out = map(sum, zip(*edge_weight_tuples))
+        if cur_in >= MIN_BIDIRECTIONAL_WEIGHT and cur_out >= MIN_BIDIRECTIONAL_WEIGHT:
+            yield edge_name, (cur_in, cur_out)
 
     def reducer(self, edge_name, edge_weight_tuples):
         """
@@ -262,14 +226,9 @@ class MRGetTweetGraph(MRJob):
         :return tuple: None, tab-separated str of edge name and directional weights
         """
 
-        cur_in = 0
-        cur_out = 0
-        for tpl in edge_weight_tuples:
-            cur_in += tpl[0]
-            cur_out += tpl[1]
-
-            if cur_in >= MIN_BIDIRECTIONAL_WEIGHT and cur_out >= MIN_BIDIRECTIONAL_WEIGHT:
-                yield None, '\t'.join([edge_name, str(cur_in), str(cur_out)])
+        cur_in, cur_out = map(sum, zip(*edge_weight_tuples))
+        if cur_in >= MIN_BIDIRECTIONAL_WEIGHT and cur_out >= MIN_BIDIRECTIONAL_WEIGHT:
+            yield None, '\t'.join([edge_name, str(cur_in), str(cur_out)])
 
 
 if __name__ == '__main__':
