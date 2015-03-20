@@ -129,14 +129,14 @@ class MRUsersToTweets(MRJob):
                     username = tweet.author[0].link[0].href.split('/')[-1].lower().\
                         decode('utf8').lower()
 
-                    # if username not in self.users:
-                    #     self.increment_counter('wa1', 'not_matched', 1)
-                    #     continue
+                    if username not in self.users:
+                        self.increment_counter('wa1', 'not_matched', 1)
+                        continue
 
                     self.increment_counter('wa1', 'matched', 1)
 
                     # yield the identifier
-                    yield None, ','.join(['ebola_'+tweet_identifier, tweet_link])
+                    yield None, tweet
 
                 except Exception as e:
                     self.increment_counter('entry_exception', type(e).__name__, 1)
