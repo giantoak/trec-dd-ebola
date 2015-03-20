@@ -29,8 +29,6 @@ class MRUsersToTweets(MRJob):
     """
     This program filters a corpus of Tweets for ones made by someone on a list of Twitter User IDs. 
     """
-    # INPUT_PROTOCOL = protocol.RawValueProtocol  # Custom parse tab-delimited values
-    # INTERNAL_PROTOCOL = PickleProtocol  # protocol.RawValueProtocol  # Serialize messages internally
     OUTPUT_PROTOCOL = RawValueProtocol  # Output as csv
 
     def configure_options(self):
@@ -43,7 +41,7 @@ class MRUsersToTweets(MRJob):
                              default='trec-kba-2013-centralized.gpg-key.private',
                              help='path to gpg private key for decrypting the data')
         self.add_file_option('--desired-users',
-                default='usernames.txt',
+                default='seed_usernames.csv',
                 help='path to list of desired usernames.')
 
     def mapper_init(self):
@@ -86,7 +84,11 @@ class MRUsersToTweets(MRJob):
         aws_prefix, aws_path = cur_line.split('//')
 
         url = os.path.join('http://s3.amazonaws.com', aws_path)
-        resp = requests.get(url)
+        try:
+            resp = requests.get(url)
+        except Exception as e:
+            self.increment_counter('resp_exception', type(e).__name__, 1)
+            return
 
         data = resp.content
         if data is None:
@@ -110,25 +112,37 @@ class MRUsersToTweets(MRJob):
 
         f = StringIO(data)
         reader = ProtoStreamReader(f)
-        for entry in reader:
-            # entries have other info, see other info here:
-            # https://github.com/trec-kba/streamcorpus-pipeline/blob/master/
-            #       streamcorpus_pipeline/_spinn3r_feed_storage.py#L269
-            tweet = entry.feed_entry
-            
-            # Extract username from the Twitter author URL
-            username = tweet.author[0].link[0].href.split('/')[-1].lower()\
-                    .decode('utf8').lower()
+        try:
+            for entry in reader:
+                # entries have other info, see other info here:
+                # https://github.com/trec-kba/streamcorpus-pipeline/blob/master/
+                #       streamcorpus_pipeline/_spinn3r_feed_storage.py#L269
+                try:
+                    tweet = entry.feed_entry
+                    if tweet.spam_probability > 0.5:
+                        self.increment_counter('wa1', 'spam_count', 1)
+                        continue
 
-            if username in self.users:
-                self.increment_counter('wa1', 'matched', 1)
-                
-                # TODO (pml): replace `tweet` below with tweet ID:
-                yield None, tweet
+                    # Extract username from the Twitter author URL
+                    tweet_identifier = str(tweet.identifier)
+                    tweet_link = tweet.link[0].href
+                    username = tweet.author[0].link[0].href.split('/')[-1].lower().\
+                        decode('utf8').lower()
 
-            else:
-                self.increment_counter('wa1', 'not_matched', 1)
+                    # if username not in self.users:
+                    #     self.increment_counter('wa1', 'not_matched', 1)
+                    #     continue
 
+                    self.increment_counter('wa1', 'matched', 1)
+
+                    # yield the identifier
+                    yield None, ','.join(['ebola_'+tweet_identifier, tweet_link])
+
+                except Exception as e:
+                    self.increment_counter('entry_exception', type(e).__name__, 1)
+
+        except Exception as e:
+            self.increment_counter('file_exception', type(e).__name__, 1)
 
 
 if __name__ == '__main__':
