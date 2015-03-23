@@ -25,6 +25,8 @@ from urllib2 import urlparse
 from streamcorpus import decrypt_and_uncompress
 from streamcorpus_pipeline._spinn3r_feed_storage import ProtoStreamReader
 
+import cbor
+from backports import lzma
 
 class MRUsersToTweets(MRJob):
     """
@@ -137,7 +139,7 @@ class MRUsersToTweets(MRJob):
                     self.increment_counter('wa1', 'matched', 1)
 
                     # yield the identifier
-                    yield None, tweet
+                    yield None, str(entry)
 
                 except Exception as e:
                     self.increment_counter('entry_exception', type(e).__name__, 1)
@@ -145,6 +147,23 @@ class MRUsersToTweets(MRJob):
         except Exception as e:
             self.increment_counter('file_exception', type(e).__name__, 1)
 
+    def combiner(self, _, entries):
+        """
+        Combine entries within a file
+        :param _:
+        :param entries: str(entry) generator
+        :return:
+        """
+        yield None, ''.join(entries)
+
+    def reducer(self, _, file_entries):
+        """
+        Combine entries within a file
+        :param _:
+        :param file_entries: joined entries generator
+        :return:
+        """
+        yield None, lzma.compress(cbor.dumps(''.join(file_entries)))
 
 if __name__ == '__main__':
     # Set up tries
