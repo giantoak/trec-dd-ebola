@@ -19,6 +19,7 @@ from mrjob.job import MRJob
 from mrjob.protocol import RawValueProtocol
 import requests
 import sys
+from urllib2 import urlparse
 
 # ingest imports
 from streamcorpus import decrypt_and_uncompress
@@ -123,13 +124,13 @@ class MRUsersToTweets(MRJob):
                         self.increment_counter('wa1', 'spam_count', 1)
                         continue
 
-                    # Extract username from the Twitter author URL
-                    tweet_identifier = str(tweet.identifier)
-                    tweet_link = tweet.link[0].href
-                    username = tweet.author[0].link[0].href.split('/')[-1].lower().\
-                        decode('utf8').lower()
+                    # Extract username from the Twitter author UR
 
-                    if username not in self.users:
+                    user_link = tweet.author[0].link[0].href
+                    user_scrn_uni = urlparse.urlsplit(user_link).path.split('@')[1].lower()
+                    user_scrn_encoded = user_scrn_uni.encode('utf8')
+
+                    if user_scrn_encoded not in self.users:
                         self.increment_counter('wa1', 'not_matched', 1)
                         continue
 
